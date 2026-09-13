@@ -1,0 +1,35 @@
+# Service belongs to the core Kubernetes API.
+apiVersion: v1
+
+# Create a Kubernetes Service.
+kind: Service
+
+# Identify the Service.
+metadata:
+  name: secure-ai-api
+  namespace: ai-platform
+
+  labels:
+    app: secure-ai-api
+    component: api
+
+# Define how the Service reaches pods.
+spec:
+
+  # ClusterIP makes the Service reachable only inside Kubernetes.
+  type: ClusterIP
+
+  # Send traffic to pods with this label.
+  selector:
+    app: secure-ai-api
+
+  # Configure the Service port.
+  ports:
+    - name: http
+      protocol: TCP
+
+      # Port presented by the Kubernetes Service.
+      port: 8000
+
+      # Port used by the FastAPI container.
+      targetPort: http

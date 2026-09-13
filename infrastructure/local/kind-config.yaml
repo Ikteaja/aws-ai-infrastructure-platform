@@ -1,0 +1,16 @@
+# kind reads this file when creating the local Kubernetes cluster.
+# It creates one control-plane node and one worker node so the layout
+# resembles EKS while staying small enough for a 16 GB Windows laptop.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+
+# This name becomes the Docker network/cluster name and the kubectl context:
+# kind-eks-local
+name: eks-local
+
+nodes:
+  # Runs the Kubernetes API server, scheduler, controller manager, and etcd.
+  - role: control-plane
+
+  # Runs application workloads such as deployments, services, and jobs.
+  - role: worker

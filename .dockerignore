@@ -1,0 +1,30 @@
+# Git files are not required in the image.
+.git
+.github
+
+# Local Python environment must not enter the image.
+.venv
+**/.venv
+
+# Python-generated files.
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+
+# Development tests are not needed at runtime.
+app/tests
+
+# Infrastructure configuration is not application runtime code.
+infrastructure
+kubernetes
+local-k8s
+docs
+scripts
+
+# Terraform state or secrets must never enter an image.
+**/.terraform
+**/*.tfstate
+**/*.tfstate.*
+**/.env
+**/*.pem
+**/*.key

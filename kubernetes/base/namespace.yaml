@@ -1,0 +1,16 @@
+# API version containing the Namespace object.
+apiVersion: v1
+
+# The type of Kubernetes object.
+kind: Namespace
+
+# Information identifying the object.
+metadata:
+
+  # All application resources will use this namespace.
+  name: ai-platform
+
+  # Labels help organize and search Kubernetes resources.
+  labels:
+    app.kubernetes.io/part-of: secure-ai-platform
+    environment: local

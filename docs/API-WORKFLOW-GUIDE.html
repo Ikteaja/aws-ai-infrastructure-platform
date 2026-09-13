@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>API Workflow Guide</title>
+<style>
+body { font-family: Segoe UI, Arial, sans-serif; line-height: 1.45; max-width: 850px; margin: 40px auto; color: #1f2937; background: #ffffff; }
+h1 { color: #123c69; border-bottom: 3px solid #f2a900; padding-bottom: 8px; }
+h2 { color: #123c69; margin-top: 28px; }
+code, pre { font-family: Consolas, monospace; }
+pre { background: #f3f4f6; padding: 12px; border-left: 4px solid #f2a900; white-space: pre-wrap; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
+th { background: #e5eef7; }
+.note { background: #fff7df; padding: 12px; border-left: 4px solid #f2a900; }
+@media print { body { color: #1f2937; background: #ffffff; } pre, table, .note { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<h1>API Workflow Guide</h1>
+<p>This document explains how a request moves through the API and how the project pieces connect.</p>
+<h2>Big Picture</h2>
+<p>Think of the workflow as a chain. An API endpoint is the combination of an HTTP method and a URL path.</p>
+<pre>Client
+  |
+  | HTTP request
+  v
+Uvicorn web server
+  |
+  v
+FastAPI application
+  |
+  v
+APIRouter
+  |
+  v
+Endpoint function in routes.py
+  |
+  v
+Pydantic validation
+  |
+  v
+Business logic
+  |
+  v
+JSON response</pre>
+<h2>The Project Layers</h2>
+<table><tr><th>Layer</th><th>Responsibility</th></tr><tr><td><code>routes.py</code></td><td>Defines HTTP endpoints and handler functions</td></tr><tr><td>Pydantic models</td><td>Validate request and response data</td></tr><tr><td><code>app/src/main.py</code></td><td>Creates the FastAPI app and includes routers</td></tr><tr><td>Uvicorn</td><td>Runs the Python web application</td></tr><tr><td>Docker</td><td>Packages the application</td></tr><tr><td>Kubernetes</td><td>Runs and exposes application containers</td></tr><tr><td>Ollama or Bedrock</td><td>Generates the AI answer</td></tr></table>
+<h2>1. Client Sends A Request</h2>
+<p>A client can be a browser, frontend application, <code>curl</code>, Postman, another backend service, or a Kubernetes health probe.</p>
+<pre>GET  /health
+GET  /ready
+POST /ask</pre>
+<p>For <code>POST /ask</code>:</p>
+<pre>{
+  "question": "What is Kubernetes?"
+}</pre>
+<h2>2. Uvicorn Receives The Request</h2>
+<p>Uvicorn is the web server process. It listens for HTTP requests and passes them to FastAPI.</p>
+<pre>\.\.venv\Scripts\python.exe -m uvicorn app.src.main:app --reload</pre>
+<p><code>app.src.main:app</code> means <code>app.src.main</code> is <code>app/src/main.py</code> and <code>app</code> is the FastAPI variable inside it.</p>
+<h2>3. FastAPI Maps The Request To A Route</h2>
+<p>The current route definitions are in <code>app/src/api/routes.py</code>.</p>
+<table><tr><th>Request</th><th>Handler</th><th>Purpose</th></tr><tr><td><code>GET /health</code></td><td><code>health_check()</code></td><td>Confirms the process is alive</td></tr><tr><td><code>GET /ready</code></td><td><code>readiness_check()</code></td><td>Confirms the app is ready</td></tr><tr><td><code>POST /ask</code></td><td><code>ask_question()</code></td><td>Accepts a question and returns an answer</td></tr></table>
+<pre>@router.get("/health")
+def health_check():
+    return {"status": "healthy"}
+
+GET /health -&gt; health_check()</pre>
+<p>The route is the public HTTP contract that points to the Python function.</p>
+<pre>GET  /health -&gt; health_check()
+GET  /ready  -&gt; readiness_check()
+POST /ask    -&gt; ask_question()</pre>
+<h2>Who Uses Each Endpoint?</h2>
+<p>Regular users normally do not call <code>/health</code> or <code>/ready</code> directly. They use the business endpoint:</p>
+<pre>User -&gt; Frontend -&gt; POST /ask -&gt; FastAPI -&gt; AI model</pre>
+<p>Kubernetes, load balancers, and monitoring systems use the health endpoints:</p>
+<pre>Kubernetes -&gt; GET /health
+Kubernetes -&gt; GET /ready</pre>
+<h3><code>/health</code>: liveness check</h3>
+<p><code>GET /health</code> answers: "Is the API process alive?" It should be a small and fast check. If it fails repeatedly, Kubernetes can restart the API container.</p>
+<pre>/health = restart me if the process is broken</pre>
+<h3><code>/ready</code>: readiness check</h3>
+<p><code>GET /ready</code> answers: "Can this API safely receive traffic?" If it fails, Kubernetes keeps the pod running but temporarily removes it from Service traffic.</p>
+<p>Later, this endpoint can check dependencies such as Ollama, a database, or AWS Bedrock:</p>
+<pre>/health -&gt; 200 OK   (the process is alive)
+/ready  -&gt; 503      (a required dependency is unavailable)</pre>
+<p>This prevents users from being routed to a pod that is running but not able to complete requests.</p>
+<h2>4. Pydantic Validates The Request</h2>
+<pre>JSON request
+  |
+  v
+QuestionRequest
+  |
+  v
+field_validator("question")
+  |
+  v
+ask_question(request)</pre>
+<p>The validator removes leading and trailing spaces, rejects an empty question, and rejects text longer than 1,000 characters. Invalid input produces a validation error before the handler runs.</p>
+<h2>How Does The Question Propagate?</h2>
+<p>The current implementation receives and validates the question, but it does not send it to an AI service yet:</p>
+<pre>Client
+  | POST /ask
+  | {"question": "What is Kubernetes?"}
+  v
+FastAPI route: ask_question(request)
+  |
+  | request.question
+  v
+QuestionRequest.question
+  |
+  v
+temporary_answer  &lt;- current stopping point
+  |
+  v
+QuestionResponse
+  |
+  v
+Client receives JSON</pre>
+<p>The important line that reads the user's question is <code>request.question</code>. The current code does not contain an Ollama URL, Bedrock client, model ID, or AI service call, so the response uses <code>model: "not-configured"</code>.</p>
+<h3>Future propagation after AI integration</h3>
+<pre>Client
+  |
+  | POST /ask
+  v
+FastAPI route
+  |
+  | ai_service.generate_answer(request.question)
+  v
+AI service layer
+  |
+  +--&gt; Ollama: HTTP request to http://localhost:11434
+  |
+  +--&gt; Bedrock: boto3 API call to AWS
+  v
+Generated answer
+  |
+  v
+QuestionResponse
+  |
+  v
+Client</pre>
+<p>The public endpoint remains <code>POST /ask</code>; only the internal provider changes.</p>
+<h3>Configuration ownership</h3>
+<pre>routes.py
+  = HTTP endpoint, request validation, and response mapping
+
+config.py or environment variables
+  = provider, URL, model name, region, and timeouts
+
+ai_service.py
+  = common generate_answer(question) interface
+
+ollama_client.py / bedrock_client.py
+  = provider-specific implementation
+
+Kubernetes Service
+  = network path to the API Pod; it does not call the AI model itself</pre>
+<h2>5. The Handler Performs The Work</h2>
+<p>FastAPI matches <code>POST /ask</code> to <code>ask_question()</code>, validates the request, runs the handler, and prepares the response.</p>
+<pre>POST /ask
+Content-Type: application/json
+
+{
+  "question": "What is Kubernetes?"
+}</pre>
+<h2>6. Handler And Response Relationship</h2>
+<p>The handler currently returns a temporary answer because an AI model is not connected yet.</p>
+<pre>ask_question()
+  |
+  v
+Ollama or AWS Bedrock
+  |
+  v
+Generated answer
+  |
+  v
+QuestionResponse</pre>
+<pre>class QuestionResponse(BaseModel):
+    question: str
+    answer: str
+    model: str</pre>
+<p>Example response:</p>
+<pre>{
+  "question": "What is Kubernetes?",
+  "answer": "The API received your question successfully. The AI model is not connected yet.",
+  "model": "not-configured"
+}</pre>
+<h2>7. Application Wiring</h2>
+<p>The route file creates an <code>APIRouter</code>, but the FastAPI application must include that router.</p>
+<p>The FastAPI application is in <code>app/src/main.py</code> and already includes the router.</p>
+<pre>from fastapi import FastAPI
+from .api.routes import router
+
+app = FastAPI(title="Secure AI Platform API")
+app.include_router(router)</pre>
+<p><code>include_router(router)</code> connects the route definitions to the running application. Without it, the functions exist in Python but are not exposed as URLs.</p>
+<pre>routes.py
+  -&gt; router = APIRouter()
+  -&gt; @router.get(...) and @router.post(...)
+  -&gt; app/src/main.py imports router
+  -&gt; app.include_router(router)
+  -&gt; Uvicorn runs app.src.main:app
+  -&gt; clients call the URLs</pre>
+<p>Useful URLs:</p>
+<pre>http://localhost:8000/health
+http://localhost:8000/ready
+http://localhost:8000/docs</pre>
+<h2>8. Kubernetes Relationship</h2>
+<p>Kubernetes does not create the application endpoints. FastAPI creates them. Kubernetes runs the application and routes traffic to it.</p>
+<pre>Browser or frontend
+  |
+  v
+Kubernetes Service
+  |
+  v
+API Pod
+  |
+  v
+Uvicorn
+  |
+  v
+FastAPI app
+  |
+  v
+Route handler</pre>
+<pre>GET /health -&gt; liveness: is the process alive?
+GET /ready  -&gt; readiness: should traffic be sent here?</pre>
+<h2>Future AI Flow</h2>
+<pre>POST /ask
+  -&gt; FastAPI route
+  -&gt; AI service client
+  -&gt; Ollama locally OR AWS Bedrock in AWS
+  -&gt; generated answer
+  -&gt; QuestionResponse</pre>
+<p>Ollama is useful for local development. AWS Bedrock is the managed AWS option for production model access.</p>
+<h2>Automated Testing</h2>
+<p>Manual browser or PowerShell checks are useful, but repeating them after every code change is inefficient. Automated tests check the API consistently before Docker or Kubernetes deployment.</p>
+<p>The tests verify <code>/health</code>, <code>/ready</code>, valid and invalid <code>/ask</code> requests, and the response structure. This is called <b>shift-left testing</b>: find problems early, before deployment.</p>
+<pre>Without tests: Code change -&gt; Docker image -&gt; Kubernetes deployment -&gt; failure discovered late
+With tests:    Code change -&gt; test detects problem -&gt; pipeline stops</pre>
+<p>The tests are in <code>app/tests/test_api.py</code>. They use FastAPI's <code>TestClient</code>, which loads the application directly in memory instead of using a network port.</p>
+<table><tr><th>Test</th><th>What it protects</th></tr><tr><td><code>test_health_endpoint</code></td><td><code>/health</code> returns 200 and healthy status</td></tr><tr><td><code>test_readiness_endpoint</code></td><td><code>/ready</code> returns 200 and ready status</td></tr><tr><td><code>test_ask_endpoint_with_valid_question</code></td><td>Valid question returns an answer</td></tr><tr><td><code>test_ask_endpoint_removes_extra_spaces</code></td><td>Surrounding spaces are cleaned</td></tr><tr><td>Invalid-input tests</td><td>Blank, missing, or wrong-type questions return 422</td></tr></table>
+<p>Tests follow three stages:</p>
+<pre>Arrange -&gt; prepare request data
+Act     -&gt; call the endpoint
+Assert  -&gt; check the result</pre>
+<pre>request_body = {"question": "What is the policy?"}
+response = client.post("/ask", json=request_body)
+assert response.status_code == 200
+assert response.json()["answer"]</pre>
+<p>Stop Uvicorn with <code>Ctrl+C</code> if it is running. From the repository root, with <code>(.venv)</code> active, run:</p>
+<pre>python -m pytest .\app\tests -v</pre>
+<p>Expected result:</p>
+<pre>7 passed</pre>
+<p>Uvicorn is not required because <code>TestClient(app)</code> calls FastAPI directly in the test process. The workflow is:</p>
+<pre>FastAPI code -&gt; pytest -&gt; Docker image -&gt; Kubernetes deployment</pre>
+<h2>Simple Mental Model</h2>
+<table><tr><th>Term</th><th>Meaning</th></tr><tr><td>Route</td><td>Public HTTP contract</td></tr><tr><td>Handler</td><td>Python function that performs the work</td></tr><tr><td>Model</td><td>Shape and validation of data</td></tr><tr><td>Uvicorn</td><td>Server process that listens for requests</td></tr><tr><td>FastAPI app</td><td>Object that owns the registered routes</td></tr><tr><td>Kubernetes</td><td>Platform that runs and exposes the server</td></tr></table>
+<div class="note"><b>Debug order:</b> Is the server running? Is the URL and HTTP method correct? Is the router included? Does validation accept the body? Does the handler complete? Does Kubernetes route to the correct Pod?</div>
+</body>
+</html>
