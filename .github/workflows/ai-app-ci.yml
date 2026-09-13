@@ -102,4 +102,50 @@ jobs:
           docker build \
             --file app/Dockerfile \
             --tag secure-ai-platform-api:${{ github.sha }} \
-            .
+
+    # Start the exact image built in the previous step.
+      - name: Start API container
+        run: |
+          # -d runs the container in the background.
+          # Publish container port 8000 on the runner's loopback address.
+          docker run -d \
+            --name api-smoke-test \
+            -p 127.0.0.1:8000:8000 \
+            secure-ai-platform-api:${{ github.sha }}
+
+      # Check that the running application responds successfully.
+      - name: Test container health
+        run: |
+          # Allow up to 15 attempts because startup takes time.
+          for attempt in {1..15}; do
+            # Request /health and capture its HTTP status code.
+            # A connection failure is tolerated while the app starts.
+            status=$(curl --silent --output /dev/null \
+              --write-out "%{http_code}" \
+              --max-time 2 \
+              http://127.0.0.1:8000/health) || status=000
+
+            # HTTP 200 means the health endpoint responded successfully.
+            if [ "$status" = "200" ]; then
+              echo "Container health check passed."
+              exit 0
+            fi
+
+            echo "Attempt $attempt: HTTP $status; waiting for startup."
+            sleep 2
+          done
+
+          # A nonzero exit code marks this pipeline step as failed.
+          echo "Container health check failed."
+          exit 1
+
+      # Show startup logs even if the health test failed.
+      - name: Show container logs
+        if: always()
+        run: docker logs api-smoke-test || true
+
+      # Remove the test container whether the test passed or failed.
+      - name: Remove test container
+        if: always()
+        run: docker rm -f api-smoke-test || true
+    
