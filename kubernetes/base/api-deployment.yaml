@@ -1,0 +1,100 @@
+# Deployment belongs to the apps API group.
+apiVersion: apps/v1
+
+# A Deployment manages application pods.
+kind: Deployment
+
+# Identify the Deployment.
+metadata:
+  name: secure-ai-api
+  namespace: ai-platform
+
+  labels:
+    app: secure-ai-api
+    component: api
+
+# Define the desired application state.
+spec:
+
+  # Run two API pod replicas.
+  replicas: 2
+
+  # The Deployment manages pods matching this label.
+  selector:
+    matchLabels:
+      app: secure-ai-api
+
+  # Define the pod template.
+  template:
+
+    # Labels assigned to every created pod.
+    metadata:
+      labels:
+        app: secure-ai-api
+        component: api
+
+    # Define the containers inside each pod.
+    spec:
+      containers:
+
+        # Logical container name.
+        - name: api
+
+          # Use the image we loaded into kind.
+          image: secure-ai-platform-api:0.1.0
+
+          # Do not try to download this local image from Docker Hub.
+          imagePullPolicy: IfNotPresent
+
+          # Document the port used by the container.
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+
+          # Confirm that the application process is alive.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          # Confirm that the application can receive traffic.
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          # Reserve and restrict CPU and memory.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+          # Apply security restrictions to the container.
+          securityContext:
+
+            # The container must not run as root.
+            runAsNonRoot: true
+
+            # Prevent the process from gaining extra privileges.
+            allowPrivilegeEscalation: false
+
+            # Remove unnecessary Linux capabilities.
+            capabilities:
+              drop:
+                - ALL
+
+            # Use the container runtime's default security profile.
+            seccompProfile:
+              type: RuntimeDefault

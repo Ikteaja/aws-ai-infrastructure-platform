@@ -1,0 +1,31 @@
+# Python virtual environment
+.venv/
+venv/
+
+# Python generated files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Private environment configuration
+.env
+app/.env
+
+# Terraform generated and state files
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+
+# Credentials and private keys
+*.pem
+*.key
+credentials
+
+# IDE and operating-system files
+.vscode/settings.json
+.DS_Store
+Thumbs.db
