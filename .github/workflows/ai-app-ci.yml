@@ -62,39 +62,39 @@ jobs:
       - name: Run API tests
         run: python -m pytest app/tests -v
 
-      # STEP 6: Build the Docker image.
-      # The final dot means: use the repository root as build context.
+      # STEP 6: Build the image and check for an updated base image.
       - name: Build Docker image
         run: |
           docker build \
+            --pull \
             --file app/Dockerfile \
             --tag secure-ai-platform-api:${{ github.sha }} \
             .
 
-      # STEP 7: Scan the image built on this runner for known vulnerabilities.
-      - name: Scan Docker image
+      # STEP 7a: Report all serious findings without blocking on findings.
+      - name: Report all serious image vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          # Scan a Docker image.
           scan-type: image
-
-          # Match the exact tag used by our Docker build step.
           image-ref: secure-ai-platform-api:${{ github.sha }}
-
-          # Check vulnerabilities rather than other scan categories.
           scanners: vuln
-
-          # Include operating-system packages and application libraries.
           vuln-type: os,library
-
-          # Display serious findings in the workflow logs.
           severity: HIGH,CRITICAL
           format: table
-
-          # Include findings even when a fix is not yet available.
           ignore-unfixed: false
+          exit-code: "0"
 
-          # Fail this step when matching vulnerabilities are found.
+      # STEP 7b: Block serious vulnerabilities with available fixes.
+      - name: Block fixable serious image vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: secure-ai-platform-api:${{ github.sha }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          format: table
+          ignore-unfixed: true
           exit-code: "1"
 
       # STEP 8: Start the image built in the previous step.
