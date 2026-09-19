@@ -1,105 +1,142 @@
-# Display name shown in the GitHub Actions tab.
+# Name displayed in the GitHub Actions tab.
 name: Application CI
 
-# Define the GitHub events that start this workflow.
+# Events that start this workflow.
 on:
-
-  # Run when a pull request targets main.
-  # This checks the destination branch, not the feature branch name.
+  # Run when a pull request targets main or receives new commits.
   pull_request:
     branches:
       - main
-
-    # opened: a new pull request was created.
-    # synchronize: new commits were pushed to its feature branch.
-    # reopened: a previously closed pull request was reopened.
     types: [opened, synchronize, reopened]
 
-  # Run again when main receives new commits, including a merge.
+  # Run again after changes enter main.
   push:
     branches:
       - main
 
-# Give the automatic GitHub token permission to read repository code.
-# This workflow does not need permission to modify the repository.
+# Allow the workflow to read repository code.
 permissions:
   contents: read
 
-# Define the jobs in this workflow.
 jobs:
-
-  # Internal identifier for our single job.
+  # Internal job identifier.
   test-and-build:
-
-    # Friendly job name displayed in the pull request.
     name: API tests and Docker build
 
-    # GitHub provides a temporary Ubuntu machine for this job.
+    # Temporary GitHub-hosted Linux machine.
     runs-on: ubuntu-24.04
 
-    # Stop the job if it runs longer than 15 minutes.
+    # Limit the total job duration.
     timeout-minutes: 15
 
-    # Steps execute in order on the same runner.
+    # Steps run sequentially on the same machine.
     steps:
-
-      # STEP 1: Download this repository onto the runner.
+      # STEP 1: Download repository code.
       - name: Check out repository
-
-        # Run the reusable checkout action maintained by GitHub.
         uses: actions/checkout@v4
-
-        # Supply settings to that action.
         with:
-
-          # Do not leave Git authentication credentials configured
-          # for later commands; this job never pushes code.
+          # This job does not need to push changes.
           persist-credentials: false
 
-      # STEP 2: Make the required Python version available.
+      # STEP 2: Configure Python and dependency caching.
       - name: Set up Python
-
-        # Run GitHub's reusable Python setup action.
         uses: actions/setup-python@v5
-
         with:
-
-          # Match the Python 3.12 runtime in our Dockerfile.
           python-version: "3.12"
-
-          # Reuse downloaded pip packages between workflow runs.
-          # Dependency installation is still required.
           cache: pip
-
-          # Update the cache key when either dependency file changes.
-          # The | character starts a multiline text value.
           cache-dependency-path: |
             app/requirements.txt
             app/requirements-dev.txt
 
-      # STEP 3: Install runtime libraries and testing tools.
+      # STEP 3: Install application and testing dependencies.
+      # requirements-dev.txt should include: -r requirements.txt
       - name: Install dependencies
-
-        # Run these shell commands from the repository root.
         run: |
           python -m pip install -r app/requirements-dev.txt
 
-      # STEP 4: Check whether installed dependency requirements agree.
+      # STEP 4: Check installed dependency compatibility.
       - name: Check dependency compatibility
         run: python -m pip check
 
-      # STEP 5: Execute the API tests and show individual test results.
+      # STEP 5: Run the API tests.
       - name: Run API tests
         run: python -m pytest app/tests -v
 
-      # STEP 6: Verify that our application can be packaged.
-      # Normally, this step is skipped if an earlier step fails.
+      # STEP 6: Build the image and check for an updated base image.
       - name: Build Docker image
-
-        # Use app/Dockerfile and the repository root as build context.
-        # github.sha supplies the commit SHA associated with this run.
         run: |
           docker build \
+            --pull \
             --file app/Dockerfile \
             --tag secure-ai-platform-api:${{ github.sha }} \
             .
+
+      # STEP 7a: Report all serious findings without blocking on findings.
+      - name: Report all serious image vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: secure-ai-platform-api:${{ github.sha }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          format: table
+          ignore-unfixed: false
+          exit-code: "0"
+
+      # STEP 7b: Block serious vulnerabilities with available fixes.
+      - name: Block fixable serious image vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: secure-ai-platform-api:${{ github.sha }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          format: table
+          ignore-unfixed: true
+          exit-code: "1"
+
+      # STEP 8: Start the image built in the previous step.
+      - name: Start API container
+        run: |
+          # Run in the background and expose port 8000 locally.
+          docker run -d \
+            --name api-smoke-test \
+            -p 127.0.0.1:8000:8000 \
+            secure-ai-platform-api:${{ github.sha }}
+
+      # STEP 9: Verify that the application responds.
+      - name: Test container health
+        run: |
+          # Retry while the application starts.
+          for attempt in {1..15}; do
+            # Read the HTTP status; use 000 if the request fails.
+            status=$(curl --silent --output /dev/null \
+              --write-out "%{http_code}" \
+              --max-time 2 \
+              http://127.0.0.1:8000/health) || status=000
+
+            # HTTP 200 means the health check passed.
+            if [ "$status" = "200" ]; then
+              echo "Container health check passed."
+              exit 0
+            fi
+
+            echo "Attempt $attempt: HTTP $status; waiting for startup."
+            sleep 2
+          done
+
+          # Fail the step if all attempts were unsuccessful.
+          echo "Container health check failed."
+          exit 1
+
+      # STEP 10: Print container logs even if an earlier step failed.
+      - name: Show container logs
+        if: always()
+        run: docker logs api-smoke-test || true
+
+      # STEP 11: Clean up even if an earlier step failed.
+      - name: Remove test container
+        if: always()
+        run: docker rm -f api-smoke-test || true
