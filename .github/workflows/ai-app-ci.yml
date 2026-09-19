@@ -71,7 +71,33 @@ jobs:
             --tag secure-ai-platform-api:${{ github.sha }} \
             .
 
-      # STEP 7: Start the image built in the previous step.
+      # STEP 7: Scan the image built on this runner for known vulnerabilities.
+      - name: Scan Docker image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          # Scan a Docker image.
+          scan-type: image
+
+          # Match the exact tag used by our Docker build step.
+          image-ref: secure-ai-platform-api:${{ github.sha }}
+
+          # Check vulnerabilities rather than other scan categories.
+          scanners: vuln
+
+          # Include operating-system packages and application libraries.
+          vuln-type: os,library
+
+          # Display serious findings in the workflow logs.
+          severity: HIGH,CRITICAL
+          format: table
+
+          # Include findings even when a fix is not yet available.
+          ignore-unfixed: false
+
+          # Fail this step when matching vulnerabilities are found.
+          exit-code: "1"
+
+      # STEP 8: Start the image built in Step 6 and scanned in Step 7.
       - name: Start API container
         run: |
           # Run in the background and expose port 8000 locally.
@@ -80,7 +106,7 @@ jobs:
             -p 127.0.0.1:8000:8000 \
             secure-ai-platform-api:${{ github.sha }}
 
-      # STEP 8: Verify that the application responds.
+      # STEP 9: Verify that the application responds.
       - name: Test container health
         run: |
           # Retry while the application starts.
@@ -105,12 +131,12 @@ jobs:
           echo "Container health check failed."
           exit 1
 
-      # STEP 9: Print container logs even if an earlier step failed.
+      # STEP 10: Print container logs even if an earlier step failed.
       - name: Show container logs
         if: always()
         run: docker logs api-smoke-test || true
 
-      # STEP 10: Clean up even if an earlier step failed.
+      # STEP 11: Clean up even if an earlier step failed.
       - name: Remove test container
         if: always()
         run: docker rm -f api-smoke-test || true
