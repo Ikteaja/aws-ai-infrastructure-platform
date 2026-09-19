@@ -61,16 +61,15 @@ jobs:
       # STEP 5: Run the API tests.
       - name: Run API tests
         run: python -m pytest app/tests -v
-
-      # STEP 6: Build the Docker image.
-      # The final dot means: use the repository root as build context.
+            .
+      # STEP 6: Build using a freshly checked base image.
       - name: Build Docker image
         run: |
           docker build \
+            --pull \
             --file app/Dockerfile \
             --tag secure-ai-platform-api:${{ github.sha }} \
             .
-
       # STEP 7: Scan the image built on this runner for known vulnerabilities.
       - name: Scan Docker image
         uses: aquasecurity/trivy-action@v0.36.0
