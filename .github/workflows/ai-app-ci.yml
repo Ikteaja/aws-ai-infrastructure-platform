@@ -59,9 +59,10 @@ jobs:
         run: python -m pip check
 
       # STEP 5: Run the API tests.
-      - name: Run API tests
-        run: python -m pytest app/tests -v
-
+      # Neither service needs a running web server.
+      - name: Run API and mock model tests
+        run: python -m pytest app/tests model_service/tests -v
+    
       # STEP 6: Build the image and check for an updated base image.
       - name: Build Docker image
         run: |
