@@ -1,3 +1,8 @@
+
+# Read configuration from environment variables.
+import os
+# Send HTTP requests to the model service.
+import httpx
 # Import APIRouter from FastAPI.
 # A router groups related API endpoints together.
 from fastapi import APIRouter, HTTPException, status
@@ -86,7 +91,13 @@ def readiness_check() -> dict[str, str]:
     }
 
 
-# Register an HTTP POST endpoint at /ask.
+#Register an HTTP POST endpoint at /ask.
+# Validate the response received from the model service.
+class ModelResponse(BaseModel):
+    answer: str = Field(min_length=1)
+    model: str = Field(min_length=1)
+
+
 @router.post(
     "/ask",
     response_model=QuestionResponse,
@@ -95,26 +106,58 @@ def readiness_check() -> dict[str, str]:
 )
 def ask_question(request: QuestionRequest) -> QuestionResponse:
 
-    # Authentication will be added in a later phase.
-    # Currently, this endpoint accepts local requests without credentials.
+    # Use the configured address, with a default for our local lab.
+    model_url = os.getenv(
+        "MODEL_BASE_URL",
+        "http://127.0.0.1:8002",
+    ).rstrip("/")
 
-    # The AI model is also not connected yet.
-    # We use a temporary answer to test the API workflow.
-    temporary_answer = (
-        "The API received your question successfully. "
-        "The AI model is not connected yet."
-    )
-
-    # If an unexpected problem occurs later, we can return an HTTP error.
-    if not temporary_answer:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="The application could not produce an answer.",
+    try:
+        # Translate the API's "question" field into the model's "prompt".
+        # Set a five-second timeout for network operations.
+        response = httpx.post(
+            f"{model_url}/generate",
+            json={"prompt": request.question},
+            timeout=5.0,
         )
 
-    # Build and return the structured response.
+        # Raise an error if the model returns a non-success status.
+        response.raise_for_status()
+
+        # Check that the response contains a valid answer and model name.
+        result = ModelResponse.model_validate(response.json())
+
+    except httpx.TimeoutException as exc:
+        # The model took too long to respond.
+        raise HTTPException(
+            status_code=504,
+            detail="The model service timed out.",
+        ) from exc
+
+    except httpx.RequestError as exc:
+        # Examples: service stopped, connection refused, DNS failure.
+        raise HTTPException(
+            status_code=503,
+            detail="The model service is unavailable.",
+        ) from exc
+
+    except httpx.HTTPStatusError as exc:
+        # The model responded, but its HTTP status indicated failure.
+        raise HTTPException(
+            status_code=502,
+            detail="The model service returned an error.",
+        ) from exc
+
+    except ValueError as exc:
+        # The response was invalid JSON or failed schema validation.
+        raise HTTPException(
+            status_code=502,
+            detail="The model service returned an invalid response.",
+        ) from exc
+
+    # Preserve the existing public API response format.
     return QuestionResponse(
         question=request.question,
-        answer=temporary_answer,
-        model="not-configured",
+        answer=result.answer,
+        model=result.model,
     )
