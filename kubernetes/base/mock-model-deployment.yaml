@@ -1,0 +1,83 @@
+# A Deployment manages the mock service's pods.
+apiVersion: apps/v1
+kind: Deployment
+
+# Identify this Deployment.
+metadata:
+  name: mock-model
+  namespace: ai-platform
+  labels:
+    app: mock-model
+    component: model
+
+spec:
+  # Run one mock service replica for this lab.
+  replicas: 1
+
+  # Manage pods with this label.
+  selector:
+    matchLabels:
+      app: mock-model
+
+  # Define the pod to create.
+  template:
+    metadata:
+      labels:
+        app: mock-model
+        component: model
+
+    spec:
+      containers:
+        # Name the container inside the pod.
+        - name: mock-model
+
+          # Use the image already loaded into kind.
+          image: secure-ai-platform-mock-model:0.1.0
+
+          # Use the local image when it is available.
+          imagePullPolicy: IfNotPresent
+
+          # Match the port used by the mock Dockerfile.
+          ports:
+            - name: http
+              containerPort: 8002
+              protocol: TCP
+
+          # Restart the container if health repeatedly fails.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          # Allow Service traffic when the application responds.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          # Reserve resources and set upper limits.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+          # Restrict the container's privileges.
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
