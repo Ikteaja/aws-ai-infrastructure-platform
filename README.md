@@ -2,6 +2,20 @@
 
 Production-style AI infrastructure using AWS, Terraform, EKS, NVIDIA GPUs, secure CI/CD, monitoring and cost controls.
 
+## Project progress
+
+Current project status is tracked across three categories:
+
+- Completed: local FastAPI service, automated tests, Docker packaging, Kubernetes deployment, mock model integration, CI workflow, vulnerability scanning, and README documentation.
+- In progress: real model integration, retrieval workflow validation, and production-style security/auth flow.
+- Planned: AWS foundation setup, EKS deployment, GPU workload management, monitoring, and full cost-control automation.
+
+### Milestone summary
+
+- 13 milestones completed
+- 1 milestone in progress
+- 8 milestones planned
+
 ![Architecture and system design](docs/images/aws-ai-platform-architecture.png)
 ![Architecture and system design](docs/images/aws-ai-infra-platform.png)
 ![Architecture and system design](docs/images/system_design.png)
