@@ -1,0 +1,29 @@
+# A Service provides a stable address for the mock pods.
+apiVersion: v1
+kind: Service
+
+metadata:
+  # The API uses this name in MODEL_BASE_URL.
+  name: mock-model
+  namespace: ai-platform
+  labels:
+    app: mock-model
+    component: model
+
+spec:
+  # Provide an internal cluster address.
+  type: ClusterIP
+
+  # Forward traffic to pods with this label.
+  selector:
+    app: mock-model
+
+  ports:
+    - name: http
+      protocol: TCP
+
+      # Port callers use when contacting this Service.
+      port: 8002
+
+      # Forward to the pod's container port named "http".
+      targetPort: http

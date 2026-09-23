@@ -1,11 +1,10 @@
 # aws-ai-infrastructure-platform
 Production-style AI infrastructure using AWS, Terraform, EKS, NVIDIA GPUs, secure CI/CD, monitoring and cost controls.
-![Architecture and system design](docs\images\aws-ai-platform-architecture.png)
-![Architecture and system design](docs\images\aws-ai-infra-platform.png)
-![Architecture and system design](docs\images\system_design.png)
+![Architecture and system design](docs/images/aws-ai-platform-architecture.png)
+![Architecture and system design](docs/images/aws-ai-infra-platform.png)
+![Architecture and system design](docs/images/system_design.png)
 
 
-````markdown
 # System Design
 
 ## 1. Project goal

@@ -41,11 +41,14 @@ spec:
         - name: api
 
           # Use the image we loaded into kind.
-          image: secure-ai-platform-api:0.1.0
+          image: secure-ai-platform-api:0.2.0
 
           # Do not try to download this local image from Docker Hub.
           imagePullPolicy: IfNotPresent
-
+          # Connect to the mock Service in the same namespace.
+          env:
+            - name: MODEL_BASE_URL
+              value: "http://mock-model:8002"
           # Document the port used by the container.
           ports:
             - name: http
