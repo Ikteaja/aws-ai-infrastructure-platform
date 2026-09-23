@@ -1,44 +1,38 @@
-# Name displayed in the GitHub Actions tab.
+# Display name in GitHub Actions.
 name: Application CI
 
-# Events that start this workflow.
+# Run for pull requests to main and commits entering main.
 on:
-  # Run when a pull request targets main or receives new commits.
   pull_request:
     branches:
       - main
     types: [opened, synchronize, reopened]
 
-  # Run again after changes enter main.
   push:
     branches:
       - main
 
-# Allow the workflow to read repository code.
+# The workflow only needs to read repository code.
 permissions:
   contents: read
 
 jobs:
-  # Internal job identifier.
   test-and-build:
+    # Preserve the existing status-check name.
     name: API tests and Docker build
-
-    # Temporary GitHub-hosted Linux machine.
     runs-on: ubuntu-24.04
 
-    # Limit the total job duration.
-    timeout-minutes: 15
+    # Allow time to build and scan both images.
+    timeout-minutes: 25
 
-    # Steps run sequentially on the same machine.
     steps:
-      # STEP 1: Download repository code.
+      # STEP 1: Download the repository.
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          # This job does not need to push changes.
           persist-credentials: false
 
-      # STEP 2: Configure Python and dependency caching.
+      # STEP 2: Configure Python and cache downloaded packages.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -47,24 +41,31 @@ jobs:
           cache-dependency-path: |
             app/requirements.txt
             app/requirements-dev.txt
+            model_service/requirements.txt
 
-      # STEP 3: Install application and testing dependencies.
-      # requirements-dev.txt should include: -r requirements.txt
-      - name: Install dependencies
+      # STEP 3: Install dependencies for both test modules.
+      - name: Install test dependencies
+        id: dependencies
         run: |
-          python -m pip install -r app/requirements-dev.txt
+          python -m pip install \
+            -r app/requirements-dev.txt \
+            -r model_service/requirements.txt
+          python -m pip check
 
-      # STEP 4: Check installed dependency compatibility.
-      - name: Check dependency compatibility
-        run: python -m pip check
+      # STEP 4: Test the API directly in memory.
+      # Outgoing model requests are replaced by the test fixture.
+      - name: Test module - API
+        run: python -m pytest app/tests -v
 
-      # STEP 5: Run the API tests.
-      # Neither service needs a running web server.
-      - name: Run API and mock model tests
-        run: python -m pytest app/tests model_service/tests -v
-    
-      # STEP 6: Build the image and check for an updated base image.
-      - name: Build Docker image
+      # STEP 5: Test the mock application directly in memory.
+      # Run even if API tests failed, provided dependencies installed.
+      # A failed API test still makes the overall job fail.
+      - name: Test module - Mock model
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: python -m pytest model_service/tests -v
+
+      # STEP 6: Build the API image from the repository root.
+      - name: Build API image
         run: |
           docker build \
             --pull \
@@ -72,8 +73,17 @@ jobs:
             --tag secure-ai-platform-api:${{ github.sha }} \
             .
 
-      # STEP 7a: Report all serious findings without blocking on findings.
-      - name: Report all serious image vulnerabilities
+      # STEP 7: Build the mock image separately.
+      - name: Build mock model image
+        run: |
+          docker build \
+            --pull \
+            --file model_service/Dockerfile \
+            --tag secure-ai-platform-mock-model:${{ github.sha }} \
+            .
+
+      # STEP 8: Report API findings, including those without fixes.
+      - name: Report API image vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
@@ -82,11 +92,24 @@ jobs:
           vuln-type: os,library
           severity: HIGH,CRITICAL
           format: table
-          ignore-unfixed: false
+          ignore-unfixed: "false"
           exit-code: "0"
 
-      # STEP 7b: Block serious vulnerabilities with available fixes.
-      - name: Block fixable serious image vulnerabilities
+      # STEP 9: Report mock findings, including those without fixes.
+      - name: Report mock image vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: secure-ai-platform-mock-model:${{ github.sha }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          format: table
+          ignore-unfixed: "false"
+          exit-code: "0"
+
+      # STEP 10: Fail for fixable HIGH/CRITICAL API findings.
+      - name: Block fixable API vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
@@ -95,49 +118,140 @@ jobs:
           vuln-type: os,library
           severity: HIGH,CRITICAL
           format: table
-          ignore-unfixed: true
+          ignore-unfixed: "true"
           exit-code: "1"
 
-      # STEP 8: Start the image built in the previous step.
+      # STEP 11: Fail for fixable HIGH/CRITICAL mock findings.
+      - name: Block fixable mock vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: secure-ai-platform-mock-model:${{ github.sha }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          format: table
+          ignore-unfixed: "true"
+          exit-code: "1"
+
+      # STEP 12: Create a network for container-to-container requests.
+      - name: Create test network
+        run: docker network create ai-ci-network
+
+      # STEP 13: Start the mock on that network.
+      # Its container name becomes its network hostname.
+      # No host port is needed for the mock.
+      - name: Start mock model container
+        run: |
+          docker run -d \
+            --name mock-model \
+            --network ai-ci-network \
+            secure-ai-platform-mock-model:${{ github.sha }}
+
+      # STEP 14: Wait for the mock's HTTP endpoint.
+      # Run Python inside the mock container; curl is not required.
+      - name: Smoke test - Mock container health
+        run: |
+          for attempt in {1..15}; do
+            if docker exec mock-model python -c \
+              "import urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8002/health', timeout=2); assert r.status == 200"; then
+              echo "Mock container health check passed."
+              exit 0
+            fi
+
+            echo "Attempt $attempt: waiting for mock startup."
+            sleep 2
+          done
+
+          echo "Mock container health check failed."
+          exit 1
+
+      # STEP 15: Start the API on the same network.
+      # MODEL_BASE_URL must match the name read by routes.py.
       - name: Start API container
         run: |
-          # Run in the background and expose port 8000 locally.
           docker run -d \
-            --name api-smoke-test \
+            --name api-integration-test \
+            --network ai-ci-network \
             -p 127.0.0.1:8000:8000 \
+            -e MODEL_BASE_URL=http://mock-model:8002 \
             secure-ai-platform-api:${{ github.sha }}
 
-      # STEP 9: Verify that the application responds.
-      - name: Test container health
+      # STEP 16: Verify the API's own health endpoint.
+      # This alone does not prove that /ask can reach the mock.
+      - name: Smoke test - API container health
         run: |
-          # Retry while the application starts.
           for attempt in {1..15}; do
-            # Read the HTTP status; use 000 if the request fails.
             status=$(curl --silent --output /dev/null \
               --write-out "%{http_code}" \
               --max-time 2 \
               http://127.0.0.1:8000/health) || status=000
 
-            # HTTP 200 means the health check passed.
             if [ "$status" = "200" ]; then
-              echo "Container health check passed."
+              echo "API container health check passed."
               exit 0
             fi
 
-            echo "Attempt $attempt: HTTP $status; waiting for startup."
+            echo "Attempt $attempt: waiting for API startup."
             sleep 2
           done
 
-          # Fail the step if all attempts were unsuccessful.
-          echo "Container health check failed."
+          echo "API container health check failed."
           exit 1
 
-      # STEP 10: Print container logs even if an earlier step failed.
-      - name: Show container logs
-        if: always()
-        run: docker logs api-smoke-test || true
+      # STEP 17: Test a real request through both running containers.
+      # No monkeypatch or simulated HTTP response is used here.
+      - name: Integration test - API calls mock model
+        run: |
+          python - <<'PY'
+          import httpx
 
-      # STEP 11: Clean up even if an earlier step failed.
-      - name: Remove test container
+          # Send the question to the API's published port.
+          question = "What is Kubernetes?"
+          response = httpx.post(
+              "http://127.0.0.1:8000/ask",
+              json={"question": question},
+              timeout=10.0,
+              trust_env=False,
+          )
+
+          # Print useful evidence before checking the result.
+          print("HTTP status:", response.status_code)
+          print("Response:", response.text)
+
+          # Verify success and the complete expected response.
+          assert response.status_code == 200, response.text
+          assert response.json() == {
+              "question": question,
+              "answer": (
+                  f"Mock response: received your prompt '{question}'. "
+                  "No real AI model is connected."
+              ),
+              "model": "mock-model-v1",
+          }
+
+          print("API-to-mock integration test passed.")
+          PY
+
+      # STEP 18: Keep each container's logs in its own visible step.
+      - name: Show API container logs
         if: always()
-        run: docker rm -f api-smoke-test || true
+        run: |
+          if docker container inspect api-integration-test >/dev/null 2>&1; then
+            docker logs api-integration-test
+          fi
+
+      - name: Show mock container logs
+        if: always()
+        run: |
+          if docker container inspect mock-model >/dev/null 2>&1; then
+            docker logs mock-model
+          fi
+
+      # STEP 19: Remove containers before removing their network.
+      # Attempt cleanup even when a previous step failed.
+      - name: Clean up test containers and network
+        if: always()
+        run: |
+          docker rm -f api-integration-test mock-model || true
+          docker network rm ai-ci-network || true

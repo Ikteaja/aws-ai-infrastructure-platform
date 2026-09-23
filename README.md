@@ -1,28 +1,40 @@
 # aws-ai-infrastructure-platform
+
 Production-style AI infrastructure using AWS, Terraform, EKS, NVIDIA GPUs, secure CI/CD, monitoring and cost controls.
+
+## Project progress
+
+Current project status is tracked across three categories:
+
+- Completed: local FastAPI service, automated tests, Docker packaging, Kubernetes deployment, mock model integration, CI workflow, vulnerability scanning, and README documentation.
+- In progress: real model integration, retrieval workflow validation, and production-style security/auth flow.
+- Planned: AWS foundation setup, EKS deployment, GPU workload management, monitoring, and full cost-control automation.
+
+### Milestone summary
+
+- 13 milestones completed
+- 1 milestone in progress
+- 8 milestones planned
+
 ![Architecture and system design](docs/images/aws-ai-platform-architecture.png)
 ![Architecture and system design](docs/images/aws-ai-infra-platform.png)
 ![Architecture and system design](docs/images/system_design.png)
 
+## System Design
 
-# System Design
+### 1. Project goal
 
-## 1. Project goal
+Build a secure, observable and cost-controlled platform that answers user questions using information retrieved from approved documents.
 
-Build a secure, observable and cost-controlled platform that answers user
-questions using information retrieved from approved documents.
-
-## 2. Example use case
+### 2. Example use case
 
 A user asks:
 
 > What is the company password policy?
 
-The system searches approved security documents, finds the relevant section,
-sends that section with the question to the model, and returns an answer with
-the source document.
+The system searches approved security documents, finds the relevant section, sends that section with the question to the model, and returns an answer with the source document.
 
-## 3. Functional requirements
+### 3. Functional requirements
 
 The system must:
 
@@ -35,7 +47,7 @@ The system must:
 7. Record logs, metrics and errors.
 8. Provide health and readiness endpoints.
 
-## 4. Non-functional requirements
+### 4. Non-functional requirements
 
 | Area | Requirement |
 |---|---|
@@ -48,7 +60,7 @@ The system must:
 | Recovery | Recreate infrastructure from Git and Terraform |
 | Privacy | Use only public or synthetic lab documents |
 
-## 5. Request flow
+### 5. Request flow
 
 ```mermaid
 sequenceDiagram
@@ -69,7 +81,7 @@ sequenceDiagram
     A-->>U: Answer and sources
 ```
 
-## 6. Component responsibilities
+### 6. Component responsibilities
 
 | Component | Responsibility |
 |---|---|
@@ -83,7 +95,7 @@ sequenceDiagram
 | GitHub Actions | Test, scan, build and deploy |
 | Monitoring | Detect availability, performance and GPU problems |
 
-## 7. API design
+### 7. API design
 
 | Method | Endpoint | Authentication | Purpose |
 |---|---|---:|---|
@@ -93,7 +105,7 @@ sequenceDiagram
 | POST | `/documents` | Administrator later | Upload a document |
 | GET | `/metrics` | Internal only | Operational metrics |
 
-## 8. Availability design
+### 8. Availability design
 
 - Run at least two API replicas.
 - Use readiness probes to remove unhealthy pods from service.
@@ -102,19 +114,19 @@ sequenceDiagram
 - Keep the model independent from the API.
 - Return HTTP 503 if the model is temporarily unavailable.
 
-## 9. Scaling design
+### 9. Scaling design
 
 ```text
 API service:
-CPU workload → multiple inexpensive replicas
+CPU workload -> multiple inexpensive replicas
 
 Model service:
-GPU workload → fewer expensive replicas
+GPU workload -> fewer expensive replicas
 ```
 
 API and model services must scale independently.
 
-## 10. Security design
+### 10. Security design
 
 - Application users authenticate with temporary tokens.
 - Administrators use IAM Identity Center.
@@ -126,7 +138,7 @@ API and model services must scale independently.
 - Network policies restrict API-to-model traffic.
 - Container images and dependencies are scanned.
 
-## 11. Configuration design
+### 11. Configuration design
 
 Configuration is supplied through environment variables:
 
@@ -140,11 +152,11 @@ MODEL_TIMEOUT_SECONDS=30
 Secrets are stored separately:
 
 ```text
-Local development → ignored .env file
-AWS environment   → AWS Secrets Manager
+Local development -> ignored .env file
+AWS environment   -> AWS Secrets Manager
 ```
 
-## 12. Failure scenarios
+### 12. Failure scenarios
 
 | Failure | Expected response |
 |---|---|
@@ -156,7 +168,7 @@ AWS environment   → AWS Secrets Manager
 | Insufficient permission | API returns HTTP 403 |
 | GPU capacity unavailable | Model pod remains pending and alert is generated |
 
-## 13. Implementation phases
+### 13. Implementation phases
 
 1. Local FastAPI and automated tests — completed.
 2. Secure Docker image — completed.

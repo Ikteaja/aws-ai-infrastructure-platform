@@ -47,7 +47,7 @@ spec:
           imagePullPolicy: IfNotPresent
           # Connect to the mock Service in the same namespace.
           env:
-            - name: MODEL_BASE_URL
+            - name: MODEL_BAS_URL
               value: "http://mock-model:8002"
           # Document the port used by the container.
           ports:
