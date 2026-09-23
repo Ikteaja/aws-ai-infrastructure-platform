@@ -2,24 +2,6 @@
 
 Production-style AI infrastructure using AWS, Terraform, EKS, NVIDIA GPUs, secure CI/CD, monitoring and cost controls.
 
-## Project progress
-
-Current project status is tracked across three categories:
-
-- Completed: local FastAPI service, automated tests, Docker packaging, Kubernetes deployment, mock model integration, CI workflow, vulnerability scanning, and README documentation.
-- In progress: real model integration, retrieval workflow validation, and production-style security/auth flow.
-- Planned: AWS foundation setup, EKS deployment, GPU workload management, monitoring, and full cost-control automation.
-
-### Milestone summary
-
-- 13 milestones completed
-- 1 milestone in progress
-- 8 milestones planned
-
-![Architecture and system design](docs/images/aws-ai-platform-architecture.png)
-![Architecture and system design](docs/images/aws-ai-infra-platform.png)
-![Architecture and system design](docs/images/system_design.png)
-
 ## System Design
 
 ### 1. Project goal
@@ -173,11 +155,81 @@ AWS environment   -> AWS Secrets Manager
 1. Local FastAPI and automated tests — completed.
 2. Secure Docker image — completed.
 3. Local Kubernetes Deployment and Service — completed.
-4. GitHub continuous integration — next.
-5. Mock inference service.
+4. GitHub continuous integration — completed.
+5. Mock inference service- completed..
 6. Document retrieval and vector storage.
 7. AWS foundation with Terraform.
 8. Amazon EKS CPU deployment.
 9. Temporary NVIDIA GPU inference.
 10. Monitoring and security validation.
 11. Destruction and leftover-resource check.
+
+## Project progress
+
+The API and mock model communicate successfully in Docker and local
+Kubernetes. GitHub Actions now tests both applications separately and
+verifies a real request between their containers.
+
+**Progress: 13 milestones completed, 1 in progress, 8 planned.**
+
+| # | Milestone | Status | Result |
+|---|---|---|---|
+| 1 | Create project structure and Git branches | ✅ Done | Application, infrastructure, Kubernetes and documentation folders created |
+| 2 | Build the FastAPI application | ✅ Done | `/health`, `/ready` and `/ask` endpoints implemented |
+| 3 | Validate incoming questions | ✅ Done | Missing, empty and incorrectly typed questions are rejected |
+| 4 | Package the API with Docker | ✅ Done | API image built with a non-root application user |
+| 5 | Deploy the API to local Kubernetes | ✅ Done | Two API replicas, internal Service, probes and resource limits configured |
+| 6 | Create GitHub Actions CI | ✅ Done | Automated dependency checks, application tests and API image build |
+| 7 | Add API container validation | ✅ Done | Image vulnerability scanning and container health smoke test added |
+| 8 | Build the mock model service | ✅ Done | Separate `/health` and `/generate` endpoints return predictable responses |
+| 9 | Connect the API to the mock service | ✅ Done | API forwards questions over HTTP and handles connection failures |
+| 10 | Test both applications | ✅ Done | Eight API tests and seven mock tests pass; each module has its own CI step |
+| 11 | Containerize and connect both services | ✅ Done | API and mock containers communicate over a Docker network |
+| 12 | Connect both services in Kubernetes | ✅ Done | Two API pods and one mock pod deployed; `/ask` returns HTTP 200 with `mock-model-v1` |
+| 13 | Update project documentation | 🟡 In progress | Update README, architecture diagrams, configuration mappings and troubleshooting notes |
+| 14 | Automate two-container integration testing | ✅ Done | CI builds and scans both images, checks container health and verifies a real API-to-mock request |
+| 15 | Add document retrieval | ⬜ Planned | Ingest documents, create embeddings and retrieve relevant context |
+| 16 | Connect a real AI model | ⬜ Planned | Replace predefined mock responses with generated answers |
+| 17 | Add authentication and access controls | ⬜ Planned | Validate user identity and restrict document access |
+| 18 | Create AWS infrastructure with Terraform | ⬜ Planned | Build reproducible cloud networking, identities and supporting services |
+| 19 | Deploy the platform to Amazon EKS | ⬜ Planned | Run the application on AWS Kubernetes |
+| 20 | Add NVIDIA GPU inference | ⬜ Planned | Run and validate GPU-backed model serving |
+| 21 | Add monitoring and operational validation | ⬜ Planned | Collect metrics, build dashboards and test alerts and recovery |
+| 22 | Validate cloud cost controls and teardown | ⬜ Planned | Destroy lab infrastructure and check for leftover chargeable resources |
+
+### Automated validation
+
+| Check | What it verifies |
+|---|---|
+| API tests — 8 tests | API health, readiness response, question validation, response handling and unavailable-model behavior |
+| Mock model tests — 7 tests | Mock health, predictable responses, whitespace handling and invalid prompts |
+| API image scan | Known vulnerabilities in operating-system packages and application libraries |
+| Mock image scan | Known vulnerabilities in operating-system packages and application libraries |
+| Mock container smoke test | The packaged mock starts and responds to `/health` |
+| API container smoke test | The packaged API starts and responds to `/health` |
+| Container integration test | `/ask` reaches the mock's `/generate` endpoint and returns the expected question, answer and model name |
+
+### Vulnerability scanning policy
+
+- Report HIGH and CRITICAL findings for both images, including findings without fixes.
+- Fail the pipeline when HIGH or CRITICAL findings have available fixes.
+- A passing scan does not mean an image has no vulnerabilities.
+
+### Current limitations
+
+- Answers come from a mock service; no real AI model is connected.
+- Document retrieval and user authentication are not implemented.
+- The API readiness endpoint does not yet check the model dependency.
+- Application tests run in memory; API tests simulate outgoing model requests.
+- The separate container integration test uses real HTTP communication.
+- Kubernetes integration has been verified manually; automated Kubernetes testing is planned.
+- AWS and GPU deployment remain planned.
+
+### Configuration issue resolved
+
+The API initially returned HTTP 503 because the Deployment defined
+`MODEL_SERVICE_URL`, while the Python application read `MODEL_BASE_URL`.
+
+Changing the Deployment variable to
+`MODEL_BASE_URL=http://mock-model:8002` restored communication.
+The corrected Deployment was applied without rebuilding the image.
