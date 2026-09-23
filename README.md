@@ -2,6 +2,14 @@
 
 Production-style AI infrastructure using AWS, Terraform, EKS, NVIDIA GPUs, secure CI/CD, monitoring and cost controls.
 
+## Architecture overview
+
+This platform combines a FastAPI application, a model service, Kubernetes orchestration, and AWS-native infrastructure patterns to provide secure, observable AI question answering for approved document sets.
+
+![Architecture and system design](docs/images/aws-ai-platform-architecture.png)
+![Architecture and system design](docs/images/aws-ai-infra-platform.png)
+![Architecture and system design](docs/images/system_design.png)
+
 ## System Design
 
 ### 1. Project goal
