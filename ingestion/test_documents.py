@@ -3,7 +3,6 @@
 # Verify that filenames and text are preserved, empty and unsupported
 # files are skipped, and missing folders raise an error.
 # pytest provides temporary folders and exception assertions.
-
 import pytest
 
 # Import the document loader we want to test.
