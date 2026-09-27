@@ -29,3 +29,23 @@ credentials
 .vscode/settings.json
 .DS_Store
 Thumbs.db
+# Generated local document-ingestion state.
+/.local/ingestion/
+########Terraform Configuration###################
+# Downloaded Terraform providers and working data.
+**/.terraform/
+
+# Local Terraform state and backup files.
+*.tfstate
+*.tfstate.*
+
+# Saved plans can contain configuration and sensitive values.
+*.tfplan
+
+# Local environment values.
+*.tfvars
+*.tfvars.json
+
+# Terraform crash logs.
+crash.log
+crash.*.log
