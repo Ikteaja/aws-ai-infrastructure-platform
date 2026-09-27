@@ -63,6 +63,11 @@ jobs:
       - name: Test module - Mock model
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: python -m pytest model_service/tests -v
+        
+      # Test the document loader independently.
+      # Temporary files are used; no running services are required.
+      - name: Run ingestion document-loader tests
+        run: python -m pytest ingestion/tests -v
 
       # STEP 6: Build the API image from the repository root.
       - name: Build API image
