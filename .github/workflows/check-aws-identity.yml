@@ -1,0 +1,29 @@
+name: Check GitHub AWS Identity
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  identity:
+    # Only inspect the identity used on main.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      # Print only identity fields, never the complete token.
+      - name: Display AWS trust identity
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const token = await core.getIDToken("sts.amazonaws.com");
+            const payload = JSON.parse(
+              Buffer.from(token.split(".")[1], "base64url").toString("utf8")
+            );
+
+            core.info(`Audience: ${payload.aud}`);
+            core.info(`Subject: ${payload.sub}`);
