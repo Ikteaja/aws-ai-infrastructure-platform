@@ -1,0 +1,202 @@
+# Check Terraform and create a reviewable development plan.
+name: Terraform Plan - dev
+
+on:
+  # Pull requests run checks without AWS credentials.
+  pull_request:
+    branches:
+      - main
+
+  # Changes on main run checks and generate an AWS-connected plan.
+  push:
+    branches:
+      - main
+
+  # Allow a fresh plan to be requested manually from main.
+  workflow_dispatch:
+
+# Give each job only the additional permissions it requires.
+permissions:
+  contents: read
+
+env:
+  TF_VERSION: "1.16.4"
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_VAR_aws_account_id: "429496640190"
+  TF_VAR_aws_region: "eu-central-1"
+  TF_VAR_document_bucket_name: "healthops-dev-documents-429496640190"
+
+jobs:
+  checks:
+    name: Format, validate, and scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      # STEP 1: Download the repository.
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      # STEP 2: Install the same Terraform version used locally.
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      # STEP 3: Check formatting without changing files.
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive infrastructure/terraform
+
+      # STEP 4: Download providers without connecting to remote state.
+      - name: Initialize for validation
+        working-directory: infrastructure/terraform/environments/dev
+        run: terraform init -backend=false -lockfile=readonly
+
+      # STEP 5: Check Terraform configuration structure.
+      - name: Validate Terraform configuration
+        working-directory: infrastructure/terraform/environments/dev
+        run: terraform validate
+
+      # STEP 6: Scan configuration for security problems.
+      - name: Scan Terraform security
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: infrastructure/terraform/environments/dev
+          severity: HIGH,CRITICAL
+          format: table
+          exit-code: "1"
+
+  plan:
+    name: Generate development plan
+    needs: checks
+
+    # Only trusted main-branch runs can access AWS.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+      id-token: write
+
+    # Use the same group as apply to avoid overlapping dev operations.
+    concurrency:
+      group: terraform-dev
+      cancel-in-progress: false
+
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/environments/dev
+
+    steps:
+      # STEP 1: Check out the exact commit associated with this run.
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      # STEP 2: Obtain temporary AWS credentials for planning.
+      - name: Authenticate to AWS
+        uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
+        with:
+          role-to-assume: ${{ secrets.TF_PLAN_ROLE_ARN }}
+          aws-region: eu-central-1
+          allowed-account-ids: "429496640190"
+          role-session-name: tf-plan-${{ github.run_id }}
+
+      # STEP 3: Connect to the dev state stored in S3.
+      - name: Initialize remote state
+        run: terraform init -lockfile=readonly
+
+      # STEP 4: Create the binary plan that apply will later use.
+      - name: Create saved plan
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/plan-artifact"
+
+          terraform plan \
+            -lock-timeout=5m \
+            -out="$GITHUB_WORKSPACE/plan-artifact/dev.tfplan"
+
+      # STEP 5: Prepare readable evidence and an integrity checksum.
+      - name: Prepare plan summary
+        run: |
+          terraform show -no-color \
+            "$GITHUB_WORKSPACE/plan-artifact/dev.tfplan" \
+            > "$GITHUB_WORKSPACE/plan-artifact/plan.txt"
+
+          terraform show -json \
+            "$GITHUB_WORKSPACE/plan-artifact/dev.tfplan" \
+            > "$RUNNER_TEMP/plan.json"
+
+          # This milestone does not permit deletion or replacement.
+          if jq -e \
+            '[.resource_changes[]? |
+              select(.change.actions | index("delete"))] |
+              length > 0' \
+            "$RUNNER_TEMP/plan.json" > /dev/null; then
+            echo "Deletion or replacement detected. Review the configuration."
+            exit 1
+          fi
+
+          cd "$GITHUB_WORKSPACE/plan-artifact"
+          sha256sum dev.tfplan > dev.tfplan.sha256
+          printf '%s\n' "$GITHUB_SHA" > commit.txt
+          printf '%s\n' "$TF_VERSION" > terraform-version.txt
+
+          {
+            echo "## Development Terraform plan"
+            echo ""
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Plan run ID: $GITHUB_RUN_ID"
+            echo "- Run attempt: $GITHUB_RUN_ATTEMPT"
+            echo "- Environment: dev"
+            echo "- Download the artifact and review plan.txt before applying."
+            echo ""
+            echo "| Resource | Action |"
+            echo "|---|---|"
+
+            jq -r \
+              '.resource_changes[]? |
+                select(.change.actions != ["no-op"]) |
+                "| \(.address) | \(.change.actions | join(", ")) |"' \
+              "$RUNNER_TEMP/plan.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # STEP 6: Retain the plan briefly for manual review and apply.
+      - name: Upload saved plan
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: terraform-dev-${{ github.run_id }}-${{ github.run_attempt }}
+          path: plan-artifact/
+          retention-days: 1
+          if-no-files-found: error
+    
+      # STEP 7: Install Checkov in an isolated Python environment.
+      - name: Install Checkov
+        run: |
+          python3 -m venv "$RUNNER_TEMP/checkov-venv"
+          "$RUNNER_TEMP/checkov-venv/bin/python" -m pip install checkov
+
+      # STEP 8: Scan the dev Terraform configuration.
+      # Download local modules so their resources are also checked.
+      # A failed check stops the workflow before planning.
+      - name: Scan Terraform with Checkov
+        run: |
+          "$RUNNER_TEMP/checkov-venv/bin/checkov" \
+            --directory infrastructure/terraform/environments/dev \
+            --framework terraform \
+            --download-external-modules true \
+            --compact

@@ -1,0 +1,211 @@
+# Apply an existing development plan only after a manual request.
+name: Terraform Apply - dev
+
+on:
+  workflow_dispatch:
+    inputs:
+      plan_run_id:
+        description: "Run ID of the successful Terraform Plan workflow"
+        required: true
+        type: string
+      confirmation:
+        description: "Type apply-dev to approve the selected plan"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  TF_VERSION: "1.16.4"
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_VAR_aws_account_id: "429496640190"
+  TF_VAR_aws_region: "eu-central-1"
+  TF_VAR_document_bucket_name: "healthops-dev-documents-429496640190"
+
+jobs:
+  apply:
+    name: Verify approval and apply
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+
+    # Do not overlap another dev plan or apply.
+    concurrency:
+      group: terraform-dev
+      cancel-in-progress: false
+
+    steps:
+      # STEP 1: Verify the person, branch, and source planning run.
+      - name: Verify manual approval and plan run
+        id: verify
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          APPROVER: ${{ vars.TF_APPROVER }}
+          PLAN_RUN_ID: ${{ inputs.plan_run_id }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        with:
+          script: |
+            const fail = message => { throw new Error(message); };
+
+            if (context.ref !== "refs/heads/main") {
+              fail("Run this workflow from main.");
+            }
+
+            const approver = process.env.APPROVER.trim().toLowerCase();
+            const actor = context.actor.toLowerCase();
+            const triggeringActor =
+              (process.env.GITHUB_TRIGGERING_ACTOR || "").toLowerCase();
+
+            if (!approver || actor !== approver || triggeringActor !== approver) {
+              fail("Only the configured TF_APPROVER can run or rerun apply.");
+            }
+
+            if (process.env.CONFIRMATION !== "apply-dev") {
+              fail("Confirmation must be exactly apply-dev.");
+            }
+
+            const runIdText = process.env.PLAN_RUN_ID.trim();
+            if (!/^[0-9]+$/.test(runIdText)) {
+              fail("The plan run ID must contain digits only.");
+            }
+
+            const runId = Number(runIdText);
+            if (!Number.isSafeInteger(runId)) {
+              fail("Invalid plan run ID.");
+            }
+
+            const {owner, repo} = context.repo;
+
+            const {data: workflow} = await github.rest.actions.getWorkflow({
+              owner, repo, workflow_id: "terraform-plan.yml"
+            });
+
+            const {data: run} = await github.rest.actions.getWorkflowRun({
+              owner, repo, run_id: runId
+            });
+
+            if (run.workflow_id !== workflow.id) {
+              fail("The selected run is not the Terraform Plan workflow.");
+            }
+
+            if (run.status !== "completed" || run.conclusion !== "success") {
+              fail("The selected planning run must have completed successfully.");
+            }
+
+            if (run.head_branch !== "main" ||
+                !["push", "workflow_dispatch"].includes(run.event) ||
+                run.head_repository?.full_name !== `${owner}/${repo}`) {
+              fail("The plan must come from this repository's main branch.");
+            }
+
+            const {data: main} = await github.rest.repos.getBranch({
+              owner, repo, branch: "main"
+            });
+
+            if (run.head_sha !== main.commit.sha ||
+                run.head_sha !== context.sha) {
+              fail("Main has changed. Generate and review a new plan.");
+            }
+
+            const age = Date.now() - Date.parse(run.created_at);
+            if (!Number.isFinite(age) || age < 0 || age > 24 * 60 * 60 * 1000) {
+              fail("The plan must be less than 24 hours old.");
+            }
+
+            core.setOutput("commit", run.head_sha);
+            core.setOutput("run_id", String(run.id));
+            core.setOutput(
+              "artifact",
+              `terraform-dev-${run.id}-${run.run_attempt}`
+            );
+
+      # STEP 2: Use the same code commit that produced the plan.
+      - name: Check out planned commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ steps.verify.outputs.commit }}
+          persist-credentials: false
+
+      # STEP 3: Download only the selected run's plan artifact.
+      - name: Download saved plan
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: ${{ steps.verify.outputs.artifact }}
+          path: plan-artifact
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.verify.outputs.run_id }}
+
+      # STEP 4: Check plan integrity and recorded configuration.
+      - name: Verify saved plan files
+        env:
+          EXPECTED_COMMIT: ${{ steps.verify.outputs.commit }}
+        run: |
+          cd plan-artifact
+          sha256sum --check dev.tfplan.sha256
+          test "$(cat commit.txt)" = "$EXPECTED_COMMIT"
+          test "$(cat terraform-version.txt)" = "$TF_VERSION"
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      # STEP 5: Obtain temporary credentials for the apply role.
+      - name: Authenticate to AWS
+        uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
+        with:
+          role-to-assume: ${{ secrets.TF_APPLY_ROLE_ARN }}
+          aws-region: eu-central-1
+          allowed-account-ids: "429496640190"
+          role-session-name: tf-apply-${{ github.run_id }}
+
+      - name: Initialize remote state
+        working-directory: infrastructure/terraform/environments/dev
+        run: terraform init -lockfile=readonly
+
+      # STEP 6: Check main again immediately before applying.
+      - name: Confirm planned commit is still current
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          EXPECTED_COMMIT: ${{ steps.verify.outputs.commit }}
+        with:
+          script: |
+            const {data: main} = await github.rest.repos.getBranch({
+              ...context.repo,
+              branch: "main"
+            });
+
+            if (main.commit.sha !== process.env.EXPECTED_COMMIT) {
+              throw new Error("Main changed. Generate and review a new plan.");
+            }
+
+      # STEP 7: Execute the saved plan without generating a different one.
+      - name: Apply approved plan
+        working-directory: infrastructure/terraform/environments/dev
+        run: |
+          terraform apply \
+            -lock-timeout=5m \
+            "$GITHUB_WORKSPACE/plan-artifact/dev.tfplan"
+
+      # STEP 8: Record which plan was applied.
+      - name: Write apply summary
+        env:
+          PLAN_RUN_ID: ${{ steps.verify.outputs.run_id }}
+          PLANNED_COMMIT: ${{ steps.verify.outputs.commit }}
+        run: |
+          {
+            echo "## Development apply completed"
+            echo ""
+            echo "- Plan run ID: $PLAN_RUN_ID"
+            echo "- Commit: $PLANNED_COMMIT"
+            echo "- Requested by: $GITHUB_ACTOR"
+            echo "- State location: dev/terraform.tfstate"
+          } >> "$GITHUB_STEP_SUMMARY"
