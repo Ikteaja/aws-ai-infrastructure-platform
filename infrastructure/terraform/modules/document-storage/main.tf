@@ -37,13 +37,17 @@ resource "aws_s3_bucket_versioning" "documents" {
   }
 }
 
-# Configure default encryption using S3-managed keys.
+# Encrypt new documents using our customer-managed KMS key.
 resource "aws_s3_bucket_server_side_encryption_configuration" "documents" {
   bucket = aws_s3_bucket.documents.id
 
   rule {
+    # Reduce the number of requests S3 sends to KMS.
+    bucket_key_enabled = true
+
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.documents.arn
     }
   }
 }
