@@ -1,7 +1,7 @@
 # Create the bucket that will hold source documents.
 resource "aws_s3_bucket" "documents" {
   bucket = var.bucket_name
-
+  # checkov:skip=CKV_AWS_144:Single-region dev with synthetic documents; revisit replication before production use.
   # Refuse to delete a bucket that still contains objects.
   force_destroy = false
 
