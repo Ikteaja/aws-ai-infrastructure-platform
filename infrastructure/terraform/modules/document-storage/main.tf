@@ -2,6 +2,8 @@
 resource "aws_s3_bucket" "documents" {
   bucket = var.bucket_name
   # checkov:skip=CKV_AWS_144:Single-region dev with synthetic documents; revisit replication before production use.
+  # checkov:skip=CKV_AWS_18:Temporary synthetic-data dev exception; enable access logging before real hospital documents are uploaded.
+
   # Refuse to delete a bucket that still contains objects.
   force_destroy = false
 
