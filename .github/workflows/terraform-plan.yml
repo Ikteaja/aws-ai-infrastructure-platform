@@ -157,14 +157,13 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
 
-      # STEP 3: Confirm that the planning role secret is available.
-      # Check its presence without printing its value.
-      - name: Check planning role secret
+      #STEP 3: Check that the repository variable contains the planning role ARN.
+      - name: Check planning role configuration
         env:
-          PLAN_ROLE_ARN: ${{ secrets.TF_PLAN_ROLE_ARN }}
+          PLAN_ROLE_ARN: ${{ vars.TF_PLAN_ROLE_ARN }}
         run: |
           if [ -z "$PLAN_ROLE_ARN" ]; then
-            echo "::error::TF_PLAN_ROLE_ARN is missing or unavailable. Check repository secrets."
+            echo "::error::TF_PLAN_ROLE_ARN is missing. Check repository variables."
             exit 1
           fi
 
@@ -177,6 +176,15 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v5.1.0
         with:
           role-to-assume: ${{ secrets.TF_PLAN_ROLE_ARN }}
+          aws-region: ${{ env.TF_VAR_aws_region }}
+          allowed-account-ids: ${{ env.TF_VAR_aws_account_id }}
+          role-session-name: tf-plan-${{ github.run_id }}
+          
+    # Obtain temporary AWS credentials using the planning role.
+      - name: Authenticate to AWS
+        uses: aws-actions/configure-aws-credentials@v5.1.0
+        with:
+          role-to-assume: ${{ vars.TF_PLAN_ROLE_ARN }}
           aws-region: ${{ env.TF_VAR_aws_region }}
           allowed-account-ids: ${{ env.TF_VAR_aws_account_id }}
           role-session-name: tf-plan-${{ github.run_id }}
