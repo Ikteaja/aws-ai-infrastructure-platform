@@ -172,15 +172,8 @@ jobs:
       # STEP 4: Exchange GitHub's identity token for temporary AWS credentials.
       # AWS must trust this repository and branch in the role's trust policy.
       # No permanent AWS access keys are stored in this workflow.
-      - name: Authenticate to AWS
-        uses: aws-actions/configure-aws-credentials@v5.1.0
-        with:
-          role-to-assume: ${{ secrets.TF_PLAN_ROLE_ARN }}
-          aws-region: ${{ env.TF_VAR_aws_region }}
-          allowed-account-ids: ${{ env.TF_VAR_aws_account_id }}
-          role-session-name: tf-plan-${{ github.run_id }}
-          
-    # Obtain temporary AWS credentials using the planning role.
+     
+      # Obtain temporary AWS credentials using the planning role.
       - name: Authenticate to AWS
         uses: aws-actions/configure-aws-credentials@v5.1.0
         with:
