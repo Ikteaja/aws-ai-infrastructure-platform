@@ -162,7 +162,7 @@ jobs:
       - name: Authenticate to AWS
         uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
         with:
-          role-to-assume: ${{ secrets.TF_APPLY_ROLE_ARN }}
+          role-to-assume: ${{ vars.TF_APPLY_ROLE_ARN }}
           aws-region: eu-central-1
           allowed-account-ids: "429496640190"
           role-session-name: tf-apply-${{ github.run_id }}
