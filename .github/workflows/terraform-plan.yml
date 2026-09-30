@@ -1,56 +1,49 @@
-# Validate, plan and report costs before merge; never apply resources here.
+# Validate Terraform, generate a plan, and report recorded AWS spending.
+# This workflow never applies infrastructure.
 name: Terraform Plan - dev
 
 on:
-  # New commits to an open pull request trigger a fresh review plan.
+  # Review proposed changes before merging into main.
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
 
-  # Commits reaching main run checks and then generate an AWS-connected plan.
+  # Generate a fresh plan after changes reach main.
+  # Only this main-branch plan is eligible for manual apply.
   push:
-    branches:
-      - main
+    branches: [main]
 
-  # Allow a fresh plan to be requested from the GitHub Actions page.
-  # Manual runs must select main; pull requests also run automatically.
+  # Allow a fresh plan to be requested manually.
+  # Select main when starting this workflow manually.
   workflow_dispatch:
 
-# Allow repository checkout.
-# The planning job adds permission to request an identity token.
+# Default permission: allow repository checkout.
 permissions:
   contents: read
 
-# Shared Terraform settings for both jobs.
+# Shared Terraform configuration.
 env:
-  # Use the same Terraform version locally and in the pipeline.
   TF_VERSION: "1.16.4"
-
-  # Use automation-friendly output and disable interactive prompts.
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
 
-  # TF_VAR_ values become inputs to Terraform variables.
+  # Terraform reads these as input variables.
   TF_VAR_aws_account_id: "429496640190"
   TF_VAR_aws_region: "eu-central-1"
   TF_VAR_document_bucket_name: "healthops-dev-documents-429496640190"
 
 jobs:
-  # JOB 1: Check the configuration before allowing AWS-connected planning.
-  # This job does not receive AWS credentials or access remote state.
+  # JOB 1: Validate and scan configuration without AWS credentials.
   checks:
     name: Format, validate, and scan
-
-    # Run on a temporary GitHub-hosted Linux machine.
     runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     steps:
-      # STEP 1: Download the repository for this workflow run.
+      # STEP 1: Download the repository.
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          # Do not leave GitHub credentials in the Git configuration.
           persist-credentials: false
 
       # STEP 2: Install the selected Terraform version.
@@ -60,26 +53,23 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
 
-      # STEP 3: Check formatting across the Terraform directory.
-      # Fail if files need formatting; do not modify them in CI.
+      # STEP 3: Fail if Terraform files need formatting.
+      # This command checks files without changing them.
       - name: Check Terraform formatting
         run: terraform fmt -check -recursive infrastructure/terraform
 
-      # STEP 4: Install the dev configuration's modules and providers.
-      # Disable the backend so this job does not access the S3 state.
+      # STEP 4: Install modules and providers without accessing S3 state.
       # Use the committed provider lock file without modifying it.
       - name: Initialize for validation
         working-directory: infrastructure/terraform/environments/dev
         run: terraform init -backend=false -lockfile=readonly
 
-      # STEP 5: Validate the dev configuration and its referenced modules.
-      # This checks configuration structure, not live AWS resources.
+      # STEP 5: Check Terraform configuration structure.
       - name: Validate Terraform configuration
         working-directory: infrastructure/terraform/environments/dev
         run: terraform validate
 
-      # STEP 6: Scan for high and critical configuration findings.
-      # A finding causes this step to fail and blocks the planning job.
+      # STEP 6: Block high and critical security findings.
       - name: Scan Terraform with Trivy
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
@@ -89,17 +79,14 @@ jobs:
           format: table
           exit-code: "1"
 
-      # STEP 7: Install Checkov in its own Python environment.
-      # This separates its dependencies from the application's dependencies.
+      # STEP 7: Install Checkov separately from application dependencies.
       - name: Install Checkov
         run: |
           python3 -m venv "$RUNNER_TEMP/checkov-venv"
           "$RUNNER_TEMP/checkov-venv/bin/python" -m pip install "checkov==3.3.21"
 
-      # STEP 8: Run an additional Terraform security-policy scan.
-      # Use an absolute path so the scan targets the correct directory.
-      # Download external modules if the configuration references them.
-      # No soft-fail option is used: failed checks block planning.
+      # STEP 8: Run additional configuration security checks.
+      # Failed checks stop this job and prevent planning.
       - name: Scan Terraform with Checkov
         run: |
           "$RUNNER_TEMP/checkov-venv/bin/checkov" \
@@ -108,17 +95,14 @@ jobs:
             --download-external-modules true \
             --compact
 
-  # JOB 2: Compare the checked configuration with current AWS infrastructure.
-  # Save the proposed changes for review and a separate manual apply workflow.
+  # JOB 2: Generate the Terraform plan and report recorded AWS spending.
   plan:
     name: Generate development plan
-
-    # Start only after every step in the checks job succeeds.
     needs: checks
 
-    # AWS-connected PR planning is limited to this personal lab's owner.
-    # Do not run Terraform from untrusted authors, forks or bot PRs with AWS access.
-    # These are workflow checks, not a substitute for restrictive AWS permissions.
+    # Allow AWS-connected PR plans only for the configured lab owner.
+    # Reject fork PRs, bot PRs, and runs started by other users.
+    # These checks supplement, but do not replace, restricted AWS permissions.
     if: >-
       (github.event_name == 'pull_request' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
@@ -132,27 +116,26 @@ jobs:
     timeout-minutes: 30
 
     permissions:
-      # Required to check out repository code.
       contents: read
 
-      # Allow GitHub to issue an identity token for AWS authentication.
+      # Allow GitHub to request temporary AWS credentials through OIDC.
       id-token: write
 
-    # Coordinate with the apply workflow using the same concurrency group.
-    # Do not cancel an operation that is already running.
+    # Use the same group in the apply workflow.
+    # Prevent simultaneous dev plan and apply jobs.
     concurrency:
       group: terraform-dev
       cancel-in-progress: false
 
-    # Run shell commands from the dev Terraform root module.
+    # Run shell commands from the development Terraform root module.
     defaults:
       run:
         working-directory: infrastructure/terraform/environments/dev
 
     steps:
-      # STEP 1: Check out the run commit.
-      # For PRs, github.sha is GitHub's test-merge commit with the base branch.
-      # For main runs, it is the main commit that the apply workflow verifies.
+      # STEP 1: Check out the exact commit associated with this run.
+      # PR runs use GitHub's test-merge commit.
+      # Main runs use the commit checked later by the apply workflow.
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -160,14 +143,14 @@ jobs:
           persist-credentials: false
 
       # STEP 2: Install Terraform on this job's separate runner.
-      # Software installed in the checks job is not shared with this job.
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
 
-      #STEP 3: Check that the repository variable contains the planning role ARN.
+      # STEP 3: Verify that the AWS planning role is configured.
+      # Store the role ARN as a GitHub repository variable.
       - name: Check planning role configuration
         env:
           PLAN_ROLE_ARN: ${{ vars.TF_PLAN_ROLE_ARN }}
@@ -179,11 +162,9 @@ jobs:
 
           echo "Planning role ARN is available."
 
-      # STEP 4: Exchange GitHub's identity token for temporary AWS credentials.
-      # AWS must trust this repository and branch in the role's trust policy.
-      # No permanent AWS access keys are stored in this workflow.
-     
-      # Obtain temporary AWS credentials using the planning role.
+      # STEP 4: Obtain temporary credentials from AWS.
+      # The role's trust policy must allow the intended main and PR subjects.
+      # No permanent AWS access keys are stored in the repository.
       - name: Authenticate to AWS
         uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
         with:
@@ -192,14 +173,12 @@ jobs:
           allowed-account-ids: ${{ env.TF_VAR_aws_account_id }}
           role-session-name: tf-plan-${{ github.run_id }}
 
-      # STEP 5: Initialize the S3 backend configured in backend.tf.
-      # The backend identifies the dev state file and enables state locking.
+      # STEP 5: Connect to the development state stored in S3.
       - name: Initialize remote state
         run: terraform init -lockfile=readonly
 
-      # STEP 6: Compare configuration, state, and current AWS resources.
-      # Save the proposed changes as a binary plan for the apply workflow.
-      # Wait up to five minutes if another operation holds the state lock.
+      # STEP 6: Compare configuration with state and current AWS resources.
+      # Save a binary plan without applying any changes.
       - name: Create saved plan
         run: |
           mkdir -p "$GITHUB_WORKSPACE/plan-artifact"
@@ -208,23 +187,23 @@ jobs:
             -lock-timeout=5m \
             -out="$GITHUB_WORKSPACE/plan-artifact/dev.tfplan"
 
-      # STEP 7: Create a readable plan and check for destructive changes.
-      # This milestone blocks deletions and replacements.
-      # Record the commit and Terraform version for later verification.
+      # STEP 7: Prepare review evidence and reject destructive changes.
+      # Preserve the metadata required by the separate apply workflow.
       - name: Prepare plan summary
         run: |
-          # Save a readable copy for manual review.
+          # Save a readable plan for review.
           terraform show -no-color \
             "$GITHUB_WORKSPACE/plan-artifact/dev.tfplan" \
             > "$GITHUB_WORKSPACE/plan-artifact/plan.txt"
 
-          # Create a temporary JSON copy for automated inspection.
+          # Create temporary JSON for inspecting planned actions.
+          # This JSON is not included in uploaded artifacts.
           terraform show -json \
             "$GITHUB_WORKSPACE/plan-artifact/dev.tfplan" \
             > "$RUNNER_TEMP/plan.json"
 
-          # Replacements also contain a delete action.
-          # Stop before publishing an artifact if either action is present.
+          # Reject deletions and replacements for this milestone.
+          # Replacement actions also contain "delete".
           if jq -e \
             '[.resource_changes[]? |
               select(.change.actions | index("delete"))] |
@@ -234,13 +213,13 @@ jobs:
             exit 1
           fi
 
-          # Record a checksum and the plan's source information.
+          # Record integrity information and the source commit.
           cd "$GITHUB_WORKSPACE/plan-artifact"
           sha256sum dev.tfplan > dev.tfplan.sha256
           printf '%s\n' "$GITHUB_SHA" > commit.txt
           printf '%s\n' "$TF_VERSION" > terraform-version.txt
 
-          # Display a short review summary in GitHub Actions.
+          # Display proposed resource changes in the workflow summary.
           {
             echo "## Development Terraform plan"
             echo ""
@@ -249,11 +228,13 @@ jobs:
             echo "- Run attempt: $GITHUB_RUN_ATTEMPT"
             echo "- Environment: dev"
             echo "- No resources were applied."
+
             if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
               echo "- Review-only PR plan: cannot be used by the apply workflow."
             else
-              echo "- Download the artifact and review plan.txt before applying."
+              echo "- Review plan.txt before requesting manual apply."
             fi
+
             echo ""
             echo "| Resource | Action |"
             echo "|---|---|"
@@ -265,53 +246,10 @@ jobs:
               "$RUNNER_TEMP/plan.json"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # STEP 8: Require the Infracost key before installing the cost tool.
-      # It is a repository SECRET, unlike the AWS role ARN repository variables.
-      - name: Check Infracost configuration
-        env:
-          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
-        run: |
-          if [ -z "$INFRACOST_API_KEY" ]; then
-            echo "::error::Create the INFRACOST_API_KEY repository secret."
-            exit 1
-          fi
-
-      # Pin the action and classic CLI so breakdown flags stay compatible.
-      # Dashboard uploads are disabled; pricing lookups still contact Infracost.
-      - name: Install Infracost
-        uses: infracost/actions/setup@e9d6e6cd65e168e76b0de50ff9957d2fe8bb1832 # v3
-        with:
-          api-key: ${{ secrets.INFRACOST_API_KEY }}
-          version: "0.10.43"
-          currency: USD
-          enable-dashboard: "false"
-
-      # STEP 9: Estimate the full proposed dev environment from the saved plan.
-      # This is not a before/after cost difference or an actual AWS bill.
-      # Raw plan JSON stays in runner temporary storage, outside the artifact.
-      - name: Estimate proposed infrastructure costs
-        run: |
-          infracost breakdown \
-            --path "$RUNNER_TEMP/plan.json" \
-            --format table \
-            --out-file "$GITHUB_WORKSPACE/plan-artifact/estimated-costs.txt"
-
-          {
-            echo "## Estimated monthly infrastructure cost"
-            echo ""
-            echo '```text'
-            cat "$GITHUB_WORKSPACE/plan-artifact/estimated-costs.txt"
-            echo '```'
-            echo ""
-            echo "Estimate for the proposed dev environment, not account spending."
-            echo "Usage-based and unsupported resources may be incomplete; review assumptions."
-            echo "This report does not enforce a spending cap."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # STEP 10: Read recorded costs from Cost Explorer with the planning role.
-      # Report account-wide costs in billing UTC dates; these are not project-only.
-      # On the first day of a month, show the previous month (zero-length ranges fail).
-      # AWS billing data can be delayed and remains provisional.
+      # STEP 8: Report spending already recorded by AWS.
+      # This covers the entire account, not only this project's resources.
+      # It does not estimate the future cost of the proposed Terraform plan.
+      # Cost Explorer API requests incur a charge.
       - name: Report recorded AWS costs
         run: |
           python3 - <<'PYTHON'
@@ -322,11 +260,17 @@ jobs:
           from decimal import Decimal
           from pathlib import Path
 
+          # AWS treats the end date as exclusive.
+          # Report from the start of the month through yesterday in UTC.
           end = dt.datetime.now(dt.timezone.utc).date()
           start = end.replace(day=1)
+
+          # On the first day of a month, report the previous month.
           if start == end:
               start = (end - dt.timedelta(days=1)).replace(day=1)
 
+          # Use this job's temporary AWS credentials.
+          # Local profiles such as ai-lab-admin are not used in CI.
           command = [
               "aws", "ce", "get-cost-and-usage",
               "--time-period", f"Start={start},End={end}",
@@ -334,47 +278,99 @@ jobs:
               "--metrics", "UnblendedCost",
               "--group-by", "Type=DIMENSION,Key=SERVICE",
               "--region", "us-east-1",
-              "--output", "json", "--no-cli-pager",
+              "--output", "json",
+              "--no-cli-pager",
           ]
-          result = subprocess.run(command, capture_output=True, text=True)
-          if result.returncode:
+
+          result = subprocess.run(
+              command,
+              capture_output=True,
+              text=True,
+          )
+
+          # Stop the job if AWS cannot provide the spending report.
+          if result.returncode != 0:
               print(result.stderr)
               raise SystemExit(result.returncode)
+
           data = json.loads(result.stdout)
           totals = {}
-          estimated = any(p.get("Estimated", False) for p in data["ResultsByTime"])
+
+          estimated = any(
+              period.get("Estimated", False)
+              for period in data["ResultsByTime"]
+          )
+
+          # Aggregate costs by service and currency.
+          # Decimal preserves precision for small amounts.
           for period in data["ResultsByTime"]:
               for group in period.get("Groups", []):
                   metric = group["Metrics"]["UnblendedCost"]
                   key = (group["Keys"][0], metric["Unit"])
-                  totals[key] = totals.get(key, Decimal("0")) + Decimal(metric["Amount"])
+                  totals[key] = (
+                      totals.get(key, Decimal("0"))
+                      + Decimal(metric["Amount"])
+                  )
+
+          account = os.environ["TF_VAR_aws_account_id"]
 
           lines = [
-              "## Recorded AWS account costs", "",
+              "## Recorded AWS account costs",
+              "",
               f"Period: {start} inclusive to {end} exclusive (UTC).",
-              "Scope: entire account 429496640190, all regions; not project-only.",
-              f"AWS marks results estimated: {estimated}.",
-              "Billing data may lag; this is not the final invoice.", "",
+              f"Scope: entire account {account}, all regions.",
+              f"AWS marks these results as estimated: {estimated}.",
+              "Billing data may be delayed; this is not the final invoice.",
+              "This report does not predict the cost of planned resources.",
+              "",
               "| Service | Recorded cost | Currency |",
               "|---|---:|---|",
           ]
+
           by_currency = {}
-          for (service, unit), amount in sorted(totals.items()):
-              lines.append(f"| {service.replace('|', '/')} | {amount:.4f} | {unit} |")
-              by_currency[unit] = by_currency.get(unit, Decimal("0")) + amount
+
+          for (service, currency), amount in sorted(totals.items()):
+              service = service.replace("|", "/")
+              lines.append(
+                  f"| {service} | {amount:.4f} | {currency} |"
+              )
+              by_currency[currency] = (
+                  by_currency.get(currency, Decimal("0")) + amount
+              )
+
           if not totals:
               lines.append("| No recorded groups returned | — | — |")
-          for unit, amount in sorted(by_currency.items()):
-              lines.append(f"| **Total** | **{amount:.4f}** | {unit} |")
+
+          for currency, amount in sorted(by_currency.items()):
+              lines.append(
+                  f"| **Total** | **{amount:.4f}** | {currency} |"
+              )
+
           report = "\n".join(lines) + "\n"
-          output = Path(os.environ["GITHUB_WORKSPACE"]) / "plan-artifact/aws-costs.md"
-          output.write_text(report, encoding="utf-8")
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+
+          # Store the report with the plan's review files.
+          output_directory = (
+              Path(os.environ["GITHUB_WORKSPACE"]) / "plan-artifact"
+          )
+          output_directory.mkdir(parents=True, exist_ok=True)
+
+          (output_directory / "aws-costs.md").write_text(
+              report,
+              encoding="utf-8",
+          )
+
+          # Display the same report in the GitHub Actions summary.
+          with open(
+              os.environ["GITHUB_STEP_SUMMARY"],
+              "a",
+              encoding="utf-8",
+          ) as summary:
               summary.write("\n" + report)
+
           print(report)
           PYTHON
 
-      # STEP 11a: PR artifacts contain review reports only, never an apply plan.
+      # STEP 9a: Upload PR review reports without the binary apply plan.
       - name: Upload pull-request review reports
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -382,15 +378,14 @@ jobs:
           name: terraform-pr-review-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ github.workspace }}/plan-artifact/plan.txt
-            ${{ github.workspace }}/plan-artifact/estimated-costs.txt
             ${{ github.workspace }}/plan-artifact/aws-costs.md
             ${{ github.workspace }}/plan-artifact/commit.txt
           retention-days: 1
           if-no-files-found: error
 
-      # STEP 11b: Only main runs publish an artifact eligible for manual apply.
-      # Preserve the artifact name and files expected by terraform-apply.yml.
-      - name: Upload saved main plan and cost reports
+      # STEP 9b: Publish an apply-eligible artifact only for main runs.
+      # Keep the artifact name and metadata expected by terraform-apply.yml.
+      - name: Upload saved main plan and AWS spending report
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -399,13 +394,14 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-      # Remove temporary machine-readable plan values even after failure.
+      # STEP 10: Remove temporary plan JSON even if an earlier step failed.
       - name: Remove temporary plan JSON
         if: always()
         run: rm -f "$RUNNER_TEMP/plan.json"
 
-  # JOB 3: A stable check name for merge protection.
-  # Explicitly reject skipped jobs; a green checks-only run is not enough.
+  # JOB 3: Provide a single result for the required review checks.
+  # Reject failed, skipped, or cancelled jobs.
+  # Enforcing this result before merge requires repository protection settings.
   review-gate:
     name: Terraform review gate
     needs: [checks, plan]
@@ -413,15 +409,17 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
+
     steps:
-      - name: Require successful checks, plan, and cost reports
+      - name: Require successful checks, plan, and AWS spending report
         env:
           CHECKS_RESULT: ${{ needs.checks.result }}
           PLAN_RESULT: ${{ needs.plan.result }}
         run: |
           if [ "$CHECKS_RESULT" != "success" ] || [ "$PLAN_RESULT" != "success" ]; then
-            echo "::error::Review failed: checks=$CHECKS_RESULT; plan-and-costs=$PLAN_RESULT."
+            echo "::error::Review failed: checks=$CHECKS_RESULT; plan-and-aws-costs=$PLAN_RESULT."
             echo "Skipped, failed, or cancelled jobs do not satisfy this gate."
             exit 1
           fi
-          echo "Validation, scans, Terraform plan and both cost reports succeeded."
+
+          echo "Validation, security scans, Terraform plan and AWS spending report succeeded."
