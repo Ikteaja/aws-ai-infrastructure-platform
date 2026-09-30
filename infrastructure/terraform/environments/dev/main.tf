@@ -4,7 +4,7 @@ module "document_storage" {
 
   # Pass the lab's bucket name into the module.
   bucket_name = var.document_bucket_name
-  
+
   # These tags must match the conditions in our AWS permissions.
   tags = {
     Project     = "healthcare-operations-assistant"
