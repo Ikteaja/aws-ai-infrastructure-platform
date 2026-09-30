@@ -1,7 +1,13 @@
 # Start from the same Python runtime family as the API image.
 FROM python:3.12-slim
 
-
+# Refresh package information and install available OS updates.
+# This includes security fixes for installed OpenSSL packages.
+# Remove package lists to keep the image smaller.
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
+    
 # Prevent Python from creating .pyc cache files.
 ENV PYTHONDONTWRITEBYTECODE=1
 
