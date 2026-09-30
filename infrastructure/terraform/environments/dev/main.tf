@@ -13,3 +13,38 @@ module "document_storage" {
     DataType    = "synthetic"
   }
 }
+#####################network modules#############################
+# Create the development network using our reusable module.
+module "network" {
+  # Resolve the module directory relative to environments/dev.
+  source = "../../modules/network"
+
+  # Prefix used in resource Name tags.
+  name = "healthops-dev"
+
+  # Reserve the VPC's private address space.
+  vpc_cidr = "10.40.0.0/16"
+
+  # Supply the subnet configuration to the child module.
+  # The keys also map subnets to their route tables.
+  private_subnets = {
+    a = {
+      cidr_block        = "10.40.16.0/20"
+      availability_zone = "eu-central-1a"
+    }
+
+    b = {
+      cidr_block        = "10.40.32.0/20"
+      availability_zone = "eu-central-1b"
+    }
+  }
+
+  # Identify the environment, owner and resource purpose.
+  tags = {
+    Project     = "healthcare-operations-assistant"
+    Environment = "dev"
+    ManagedBy   = "Terraform"
+    Component   = "network"
+    Owner       = "Ikteaja"
+  }
+}
