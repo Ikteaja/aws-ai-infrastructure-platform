@@ -1,11 +1,11 @@
-# Check Terraform configuration and create a reviewable development plan.
+# Validate, plan and report costs before merge; never apply resources here.
 name: Terraform Plan - dev
 
 on:
-  # Pull requests run validation and security checks without AWS access.
+  # New commits to an open pull request trigger a fresh review plan.
   pull_request:
-    branches:
-      - main
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
 
   # Commits reaching main run checks and then generate an AWS-connected plan.
   push:
@@ -13,7 +13,7 @@ on:
       - main
 
   # Allow a fresh plan to be requested from the GitHub Actions page.
-  # The planning job below only runs when main is selected.
+  # Manual runs must select main; pull requests also run automatically.
   workflow_dispatch:
 
 # Allow repository checkout.
@@ -94,7 +94,7 @@ jobs:
       - name: Install Checkov
         run: |
           python3 -m venv "$RUNNER_TEMP/checkov-venv"
-          "$RUNNER_TEMP/checkov-venv/bin/python" -m pip install checkov
+          "$RUNNER_TEMP/checkov-venv/bin/python" -m pip install "checkov==3.3.21"
 
       # STEP 8: Run an additional Terraform security-policy scan.
       # Use an absolute path so the scan targets the correct directory.
@@ -116,12 +116,20 @@ jobs:
     # Start only after every step in the checks job succeeds.
     needs: checks
 
-    # Pull requests cannot run this job.
-    # Pushes and manual runs must use the main branch.
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # AWS-connected PR planning is limited to this personal lab's owner.
+    # Do not run Terraform from untrusted authors, forks or bot PRs with AWS access.
+    # These are workflow checks, not a substitute for restrictive AWS permissions.
+    if: >-
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.user.login == vars.TF_APPROVER &&
+       github.actor == vars.TF_APPROVER &&
+       github.triggering_actor == vars.TF_APPROVER) ||
+      ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+       github.ref == 'refs/heads/main')
 
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     permissions:
       # Required to check out repository code.
@@ -142,7 +150,9 @@ jobs:
         working-directory: infrastructure/terraform/environments/dev
 
     steps:
-      # STEP 1: Download the exact commit associated with this run.
+      # STEP 1: Check out the run commit.
+      # For PRs, github.sha is GitHub's test-merge commit with the base branch.
+      # For main runs, it is the main commit that the apply workflow verifies.
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -175,7 +185,7 @@ jobs:
      
       # Obtain temporary AWS credentials using the planning role.
       - name: Authenticate to AWS
-        uses: aws-actions/configure-aws-credentials@v5.1.0
+        uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
         with:
           role-to-assume: ${{ vars.TF_PLAN_ROLE_ARN }}
           aws-region: ${{ env.TF_VAR_aws_region }}
@@ -239,7 +249,11 @@ jobs:
             echo "- Run attempt: $GITHUB_RUN_ATTEMPT"
             echo "- Environment: dev"
             echo "- No resources were applied."
-            echo "- Download the artifact and review plan.txt before applying."
+            if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+              echo "- Review-only PR plan: cannot be used by the apply workflow."
+            else
+              echo "- Download the artifact and review plan.txt before applying."
+            fi
             echo ""
             echo "| Resource | Action |"
             echo "|---|---|"
@@ -251,13 +265,163 @@ jobs:
               "$RUNNER_TEMP/plan.json"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # STEP 8: Store the reviewed-plan files for the manual apply workflow.
-      # Include the run attempt so reruns have distinct artifact names.
-      # Keep retention short because plan files can contain sensitive values.
-      - name: Upload saved plan
+      # STEP 8: Require the Infracost key before installing the cost tool.
+      # It is a repository SECRET, unlike the AWS role ARN repository variables.
+      - name: Check Infracost configuration
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+        run: |
+          if [ -z "$INFRACOST_API_KEY" ]; then
+            echo "::error::Create the INFRACOST_API_KEY repository secret."
+            exit 1
+          fi
+
+      # Pin the action and classic CLI so breakdown flags stay compatible.
+      # Dashboard uploads are disabled; pricing lookups still contact Infracost.
+      - name: Install Infracost
+        uses: infracost/actions/setup@e9d6e6cd65e168e76b0de50ff9957d2fe8bb1832 # v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+          version: "0.10.43"
+          currency: USD
+          enable-dashboard: "false"
+
+      # STEP 9: Estimate the full proposed dev environment from the saved plan.
+      # This is not a before/after cost difference or an actual AWS bill.
+      # Raw plan JSON stays in runner temporary storage, outside the artifact.
+      - name: Estimate proposed infrastructure costs
+        run: |
+          infracost breakdown \
+            --path "$RUNNER_TEMP/plan.json" \
+            --format table \
+            --out-file "$GITHUB_WORKSPACE/plan-artifact/estimated-costs.txt"
+
+          {
+            echo "## Estimated monthly infrastructure cost"
+            echo ""
+            echo '```text'
+            cat "$GITHUB_WORKSPACE/plan-artifact/estimated-costs.txt"
+            echo '```'
+            echo ""
+            echo "Estimate for the proposed dev environment, not account spending."
+            echo "Usage-based and unsupported resources may be incomplete; review assumptions."
+            echo "This report does not enforce a spending cap."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # STEP 10: Read recorded costs from Cost Explorer with the planning role.
+      # Report account-wide costs in billing UTC dates; these are not project-only.
+      # On the first day of a month, show the previous month (zero-length ranges fail).
+      # AWS billing data can be delayed and remains provisional.
+      - name: Report recorded AWS costs
+        run: |
+          python3 - <<'PYTHON'
+          import datetime as dt
+          import json
+          import os
+          import subprocess
+          from decimal import Decimal
+          from pathlib import Path
+
+          end = dt.datetime.now(dt.timezone.utc).date()
+          start = end.replace(day=1)
+          if start == end:
+              start = (end - dt.timedelta(days=1)).replace(day=1)
+
+          command = [
+              "aws", "ce", "get-cost-and-usage",
+              "--time-period", f"Start={start},End={end}",
+              "--granularity", "MONTHLY",
+              "--metrics", "UnblendedCost",
+              "--group-by", "Type=DIMENSION,Key=SERVICE",
+              "--region", "us-east-1",
+              "--output", "json", "--no-cli-pager",
+          ]
+          result = subprocess.run(command, capture_output=True, text=True)
+          if result.returncode:
+              print(result.stderr)
+              raise SystemExit(result.returncode)
+          data = json.loads(result.stdout)
+          totals = {}
+          estimated = any(p.get("Estimated", False) for p in data["ResultsByTime"])
+          for period in data["ResultsByTime"]:
+              for group in period.get("Groups", []):
+                  metric = group["Metrics"]["UnblendedCost"]
+                  key = (group["Keys"][0], metric["Unit"])
+                  totals[key] = totals.get(key, Decimal("0")) + Decimal(metric["Amount"])
+
+          lines = [
+              "## Recorded AWS account costs", "",
+              f"Period: {start} inclusive to {end} exclusive (UTC).",
+              "Scope: entire account 429496640190, all regions; not project-only.",
+              f"AWS marks results estimated: {estimated}.",
+              "Billing data may lag; this is not the final invoice.", "",
+              "| Service | Recorded cost | Currency |",
+              "|---|---:|---|",
+          ]
+          by_currency = {}
+          for (service, unit), amount in sorted(totals.items()):
+              lines.append(f"| {service.replace('|', '/')} | {amount:.4f} | {unit} |")
+              by_currency[unit] = by_currency.get(unit, Decimal("0")) + amount
+          if not totals:
+              lines.append("| No recorded groups returned | — | — |")
+          for unit, amount in sorted(by_currency.items()):
+              lines.append(f"| **Total** | **{amount:.4f}** | {unit} |")
+          report = "\n".join(lines) + "\n"
+          output = Path(os.environ["GITHUB_WORKSPACE"]) / "plan-artifact/aws-costs.md"
+          output.write_text(report, encoding="utf-8")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("\n" + report)
+          print(report)
+          PYTHON
+
+      # STEP 11a: PR artifacts contain review reports only, never an apply plan.
+      - name: Upload pull-request review reports
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: terraform-pr-review-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ github.workspace }}/plan-artifact/plan.txt
+            ${{ github.workspace }}/plan-artifact/estimated-costs.txt
+            ${{ github.workspace }}/plan-artifact/aws-costs.md
+            ${{ github.workspace }}/plan-artifact/commit.txt
+          retention-days: 1
+          if-no-files-found: error
+
+      # STEP 11b: Only main runs publish an artifact eligible for manual apply.
+      # Preserve the artifact name and files expected by terraform-apply.yml.
+      - name: Upload saved main plan and cost reports
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: terraform-dev-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ github.workspace }}/plan-artifact/
           retention-days: 1
           if-no-files-found: error
+
+      # Remove temporary machine-readable plan values even after failure.
+      - name: Remove temporary plan JSON
+        if: always()
+        run: rm -f "$RUNNER_TEMP/plan.json"
+
+  # JOB 3: A stable check name for merge protection.
+  # Explicitly reject skipped jobs; a green checks-only run is not enough.
+  review-gate:
+    name: Terraform review gate
+    needs: [checks, plan]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require successful checks, plan, and cost reports
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          PLAN_RESULT: ${{ needs.plan.result }}
+        run: |
+          if [ "$CHECKS_RESULT" != "success" ] || [ "$PLAN_RESULT" != "success" ]; then
+            echo "::error::Review failed: checks=$CHECKS_RESULT; plan-and-costs=$PLAN_RESULT."
+            echo "Skipped, failed, or cancelled jobs do not satisfy this gate."
+            exit 1
+          fi
+          echo "Validation, scans, Terraform plan and both cost reports succeeded."
