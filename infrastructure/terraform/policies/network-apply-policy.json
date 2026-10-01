@@ -1,0 +1,185 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadRegionalNetworkConfiguration",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeVpcs",
+        "ec2:DescribeVpcAttribute",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeRouteTables",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeSecurityGroupRules",
+        "ec2:DescribeNetworkAcls",
+        "ec2:DescribeFlowLogs",
+        "ec2:DescribeTags",
+        "ec2:DescribeAvailabilityZones"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1"
+        }
+      }
+    },
+    {
+      "Sid": "ConfigureRegionalNetworkFoundation",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateVpc",
+        "ec2:ModifyVpcAttribute",
+        "ec2:CreateSubnet",
+        "ec2:ModifySubnetAttribute",
+        "ec2:CreateRouteTable",
+        "ec2:AssociateRouteTable",
+        "ec2:DisassociateRouteTable",
+        "ec2:ReplaceRouteTableAssociation",
+        "ec2:RevokeSecurityGroupIngress",
+        "ec2:RevokeSecurityGroupEgress",
+        "ec2:CreateFlowLogs",
+        "ec2:CreateTags",
+        "ec2:DeleteTags"
+      ],
+      "Resource": [
+        "arn:aws:ec2:eu-central-1:429496640190:vpc/*",
+        "arn:aws:ec2:eu-central-1:429496640190:subnet/*",
+        "arn:aws:ec2:eu-central-1:429496640190:route-table/*",
+        "arn:aws:ec2:eu-central-1:429496640190:security-group/*",
+        "arn:aws:ec2:eu-central-1:429496640190:vpc-flow-log/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1"
+        }
+      }
+    },
+    {
+      "Sid": "CreateDevelopmentFlowLogKey",
+      "Effect": "Allow",
+      "Action": "kms:CreateKey",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1",
+          "aws:RequestTag/Name": "healthops-dev-vpc-flow-logs-key",
+          "aws:RequestTag/Project": "healthcare-operations-assistant",
+          "aws:RequestTag/Environment": "dev",
+          "aws:RequestTag/ManagedBy": "Terraform",
+          "aws:RequestTag/Component": "network-flow-logs",
+          "aws:RequestTag/Owner": "Ikteaja",
+          "kms:KeyUsage": "ENCRYPT_DECRYPT",
+          "kms:KeySpec": "SYMMETRIC_DEFAULT"
+        },
+        "Bool": {
+          "kms:BypassPolicyLockoutSafetyCheck": "false"
+        }
+      }
+    },
+    {
+      "Sid": "TagDevelopmentFlowLogKeyDuringCreation",
+      "Effect": "Allow",
+      "Action": "kms:TagResource",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1",
+          "aws:RequestTag/Name": "healthops-dev-vpc-flow-logs-key",
+          "aws:RequestTag/Project": "healthcare-operations-assistant",
+          "aws:RequestTag/Environment": "dev",
+          "aws:RequestTag/ManagedBy": "Terraform",
+          "aws:RequestTag/Component": "network-flow-logs",
+          "aws:RequestTag/Owner": "Ikteaja"
+        }
+      }
+    },
+    {
+      "Sid": "ManageDevelopmentFlowLogKey",
+      "Effect": "Allow",
+      "Action": [
+        "kms:DescribeKey",
+        "kms:GetKeyPolicy",
+        "kms:GetKeyRotationStatus",
+        "kms:ListResourceTags",
+        "kms:EnableKeyRotation",
+        "kms:UpdateKeyDescription",
+        "kms:PutKeyPolicy"
+      ],
+      "Resource": "arn:aws:kms:eu-central-1:429496640190:key/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Name": "healthops-dev-vpc-flow-logs-key",
+          "aws:ResourceTag/Project": "healthcare-operations-assistant",
+          "aws:ResourceTag/Environment": "dev",
+          "aws:ResourceTag/Component": "network-flow-logs"
+        }
+      }
+    },
+    {
+      "Sid": "ManageSpecificFlowLogRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:GetRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:UpdateRole",
+        "iam:UpdateRoleDescription",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:ListRoleTags",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:GetRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy"
+      ],
+      "Resource": "arn:aws:iam::429496640190:role/healthops-dev-vpc-flow-logs"
+    },
+    {
+      "Sid": "PassSpecificRoleToVpcFlowLogs",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::429496640190:role/healthops-dev-vpc-flow-logs",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "vpc-flow-logs.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "ReadRegionalLogGroupInventory",
+      "Effect": "Allow",
+      "Action": "logs:DescribeLogGroups",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1"
+        }
+      }
+    },
+    {
+      "Sid": "ConfigureSpecificFlowLogGroup",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:PutRetentionPolicy",
+        "logs:AssociateKmsKey",
+        "logs:ListTagsLogGroup",
+        "logs:ListTagsForResource",
+        "logs:TagLogGroup",
+        "logs:TagResource",
+        "logs:UntagLogGroup",
+        "logs:UntagResource"
+      ],
+      "Resource": [
+        "arn:aws:logs:eu-central-1:429496640190:log-group:/aws/vpc/healthops-dev/flow-logs",
+        "arn:aws:logs:eu-central-1:429496640190:log-group:/aws/vpc/healthops-dev/flow-logs:*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1"
+        }
+      }
+    }
+  ]
+}
