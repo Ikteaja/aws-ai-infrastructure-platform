@@ -1,0 +1,125 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadDevRepositories",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:DescribeRepositories",
+        "ecr:ListTagsForResource",
+        "ecr:GetLifecyclePolicy",
+        "ecr:GetRepositoryPolicy"
+      ],
+      "Resource": [
+        "arn:aws:ecr:eu-central-1:429496640190:repository/healthops-dev/api",
+        "arn:aws:ecr:eu-central-1:429496640190:repository/healthops-dev/mock-model"
+      ]
+    },
+    {
+      "Sid": "ReadRegistryScanning",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetRegistryScanningConfiguration"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadDevRegistryKey",
+      "Effect": "Allow",
+      "Action": [
+        "kms:DescribeKey",
+        "kms:GetKeyPolicy",
+        "kms:GetKeyRotationStatus",
+        "kms:ListResourceTags"
+      ],
+      "Resource": "arn:aws:kms:eu-central-1:429496640190:key/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Name": "healthops-dev-ecr-key",
+          "aws:ResourceTag/Project": "healthcare-operations-assistant",
+          "aws:ResourceTag/Environment": "dev",
+          "aws:ResourceTag/Component": "container-registry"
+        }
+      }
+    },
+    {
+      "Sid": "ManageDevRepositories",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:CreateRepository",
+        "ecr:DeleteRepository",
+        "ecr:TagResource",
+        "ecr:UntagResource",
+        "ecr:PutImageTagMutability",
+        "ecr:PutImageScanningConfiguration",
+        "ecr:PutLifecyclePolicy",
+        "ecr:DeleteLifecyclePolicy"
+      ],
+      "Resource": [
+        "arn:aws:ecr:eu-central-1:429496640190:repository/healthops-dev/api",
+        "arn:aws:ecr:eu-central-1:429496640190:repository/healthops-dev/mock-model"
+      ]
+    },
+    {
+      "Sid": "CreateTaggedRegistryKey",
+      "Effect": "Allow",
+      "Action": [
+        "kms:CreateKey",
+        "kms:TagResource"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1",
+          "aws:RequestTag/Name": "healthops-dev-ecr-key",
+          "aws:RequestTag/Project": "healthcare-operations-assistant",
+          "aws:RequestTag/Environment": "dev",
+          "aws:RequestTag/Component": "container-registry"
+        }
+      }
+    },
+    {
+      "Sid": "ManageTaggedRegistryKey",
+      "Effect": "Allow",
+      "Action": [
+        "kms:EnableKeyRotation",
+        "kms:DisableKeyRotation",
+        "kms:UpdateKeyDescription",
+        "kms:PutKeyPolicy",
+        "kms:TagResource",
+        "kms:UntagResource",
+        "kms:ScheduleKeyDeletion",
+        "kms:CancelKeyDeletion",
+        "kms:RetireGrant"
+      ],
+      "Resource": "arn:aws:kms:eu-central-1:429496640190:key/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Name": "healthops-dev-ecr-key",
+          "aws:ResourceTag/Project": "healthcare-operations-assistant",
+          "aws:ResourceTag/Environment": "dev",
+          "aws:ResourceTag/Component": "container-registry"
+        }
+      }
+    },
+    {
+      "Sid": "GrantECRUseOfKey",
+      "Effect": "Allow",
+      "Action": [
+        "kms:CreateGrant"
+      ],
+      "Resource": "arn:aws:kms:eu-central-1:429496640190:key/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Name": "healthops-dev-ecr-key",
+          "aws:ResourceTag/Project": "healthcare-operations-assistant",
+          "aws:ResourceTag/Environment": "dev",
+          "aws:ResourceTag/Component": "container-registry"
+        },
+        "Bool": {
+          "kms:GrantIsForAWSResource": "true"
+        }
+      }
+    }
+  ]
+}
