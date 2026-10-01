@@ -70,6 +70,74 @@ sequenceDiagram
     M-->>A: Generated answer
     A-->>U: Answer and sources
 ```
+### 13. Implementation phases
+
+1. Local FastAPI application and automated tests — ✅ Completed.
+2. Secure Docker images and vulnerability scanning — ✅ Completed.
+3. Local Kubernetes Deployments and Services — ✅ Completed.
+4. GitHub application CI and container integration testing — ✅ Completed.
+5. Mock inference service and API communication — ✅ Completed.
+6. Document loading, change detection and persistent ingestion state — ✅ Completed.
+7. Document chunking, embeddings, retrieval and vector storage — ⬜ Planned.
+8. AWS foundation with Terraform — 🟡 In progress.
+9. Terraform pull-request planning and AWS spending reports — 🟡 In progress.
+10. Amazon EKS CPU deployment — ⬜ Planned.
+11. Real model integration and temporary NVIDIA GPU inference — ⬜ Planned.
+12. Authentication, monitoring and operational security validation — ⬜ Planned.
+13. Infrastructure teardown and leftover-resource verification — ⬜ Planned.
+
+## Project progress
+
+The API and mock model communicate successfully in Docker and local
+Kubernetes. Application CI tests both services and verifies a real
+API-to-model request.
+
+Document ingestion now loads sample hospital documents, detects changes
+and saves a local JSON snapshot between runs. All 15 ingestion tests
+passed locally and in GitHub Actions. Retrieval and real AI answers
+are not implemented yet.
+
+AWS Terraform state storage and the encrypted document bucket have been
+created. The networking module passes local Terraform validation.
+Network deployment and the revised pull-request planning workflow are
+still being verified.
+
+**Progress: 20 milestones completed, 4 in progress, 8 planned.**
+
+| # | Milestone | Status | Result |
+|---|---|---|---|
+| 1 | Create project structure and Git branches | ✅ Done | Application, infrastructure, Kubernetes and documentation folders created |
+| 2 | Build the FastAPI application | ✅ Done | `/health`, `/ready` and `/ask` endpoints implemented |
+| 3 | Validate incoming questions | ✅ Done | Missing, empty and incorrectly typed questions are rejected |
+| 4 | Package the API with Docker | ✅ Done | API image runs with a non-root application user |
+| 5 | Deploy the API to local Kubernetes | ✅ Done | Two replicas, internal Service, health probes and resource limits configured |
+| 6 | Create GitHub Actions application CI | ✅ Done | Dependency checks, application tests and Docker builds automated |
+| 7 | Add image scanning and container validation | ✅ Done | Vulnerability scans and container health checks added |
+| 8 | Build the mock model service | ✅ Done | Separate `/health` and `/generate` endpoints return predictable responses |
+| 9 | Connect the API to the mock service | ✅ Done | API forwards questions over HTTP and handles model-service failures |
+| 10 | Test both applications | ✅ Done | API and mock-service tests run in separate CI steps |
+| 11 | Connect both services in Docker | ✅ Done | API and mock containers communicate over a shared Docker network |
+| 12 | Connect both services in local Kubernetes | ✅ Done | Two API pods and one mock pod run on the worker node; `/ask` returns HTTP 200 |
+| 13 | Automate container integration testing | ✅ Done | CI verifies a real API-to-mock request and the expected response |
+| 14 | Create sample hospital documents | ✅ Done | Synthetic application overview, login-failure runbook and recovery checklist added |
+| 15 | Implement the document loader | ✅ Done | Markdown documents load with their text and source filenames |
+| 16 | Implement document change detection | ✅ Done | Snapshots identify new, changed, unchanged and removed documents |
+| 17 | Add persistent ingestion state and a runnable command | ✅ Done | Local JSON state remembers documents between runs; invalid state and failed saves are tested |
+| 18 | Add ingestion tests to CI | ✅ Done | All 15 loader, change-detection, state and command tests passed locally and in CI |
+| 19 | Bootstrap remote Terraform state | ✅ Done | Dedicated S3 state bucket created with versioning, encryption and public-access blocking; dev uses a separate state key and locking |
+| 20 | Configure AWS access and manual Terraform apply | ✅ Done | Separate planning and apply roles use temporary GitHub credentials; a manually requested apply completed successfully |
+| 21 | Create encrypted AWS document storage | ✅ Done | Document bucket deployed with public-access blocking, versioning and customer-managed KMS encryption |
+| 22 | Build and deploy the AWS network module | 🟡 In progress | VPC, two private subnets, route tables and default security-group restrictions configured; local validation passed; deployment verification pending |
+| 23 | Complete pre-merge Terraform planning | 🟡 In progress | Workflow configured for validation, security scans and PR planning; latest end-to-end run still needs confirmation |
+| 24 | Integrate recorded AWS spending reports | 🟡 In progress | Local Cost Explorer query succeeded; pipeline report added and Infracost removed; CI verification pending |
+| 25 | Maintain project documentation | 🟡 In progress | README, ingestion guide, networking mappings and pipeline instructions updated as implementation progresses |
+| 26 | Add chunking, embeddings and vector retrieval | ⬜ Planned | Split documents into searchable sections and retrieve relevant evidence with source references |
+| 27 | Connect a real AI model | ⬜ Planned | Send the question and retrieved evidence to a model and return a grounded answer |
+| 28 | Add authentication and document access controls | ⬜ Planned | Validate user identity and restrict retrieval to permitted documents |
+| 29 | Connect ingestion to AWS document storage | ⬜ Planned | Read approved documents from S3 and process updates through a separate ingestion workflow |
+| 30 | Deploy the platform to Amazon EKS | ⬜ Planned | Run the API and supporting services on CPU worker nodes |
+| 31 | Add temporary NVIDIA GPU inference | ⬜ Planned | Deploy GPU-backed model serving, test performance and remove GPU resources after testing |
+| 32 | Validate operations, cost controls and teardown | ⬜ Planned | Add metrics and alerts, test recovery, review spending and verify removal of chargeable lab resources |
 
 ### 6. Component responsibilities
 
@@ -158,52 +226,7 @@ AWS environment   -> AWS Secrets Manager
 | Insufficient permission | API returns HTTP 403 |
 | GPU capacity unavailable | Model pod remains pending and alert is generated |
 
-### 13. Implementation phases
 
-1. Local FastAPI and automated tests — completed.
-2. Secure Docker image — completed.
-3. Local Kubernetes Deployment and Service — completed.
-4. GitHub continuous integration — completed.
-5. Mock inference service- completed..
-6. Document retrieval and vector storage.
-7. AWS foundation with Terraform.
-8. Amazon EKS CPU deployment.
-9. Temporary NVIDIA GPU inference.
-10. Monitoring and security validation.
-11. Destruction and leftover-resource check.
-
-## Project progress
-
-The API and mock model communicate successfully in Docker and local
-Kubernetes. GitHub Actions now tests both applications separately and
-verifies a real request between their containers.
-
-**Progress: 13 milestones completed, 1 in progress, 8 planned.**
-
-| # | Milestone | Status | Result |
-|---|---|---|---|
-| 1 | Create project structure and Git branches | ✅ Done | Application, infrastructure, Kubernetes and documentation folders created |
-| 2 | Build the FastAPI application | ✅ Done | `/health`, `/ready` and `/ask` endpoints implemented |
-| 3 | Validate incoming questions | ✅ Done | Missing, empty and incorrectly typed questions are rejected |
-| 4 | Package the API with Docker | ✅ Done | API image built with a non-root application user |
-| 5 | Deploy the API to local Kubernetes | ✅ Done | Two API replicas, internal Service, probes and resource limits configured |
-| 6 | Create GitHub Actions CI | ✅ Done | Automated dependency checks, application tests and API image build |
-| 7 | Add API container validation | ✅ Done | Image vulnerability scanning and container health smoke test added |
-| 8 | Build the mock model service | ✅ Done | Separate `/health` and `/generate` endpoints return predictable responses |
-| 9 | Connect the API to the mock service | ✅ Done | API forwards questions over HTTP and handles connection failures |
-| 10 | Test both applications | ✅ Done | Eight API tests and seven mock tests pass; each module has its own CI step |
-| 11 | Containerize and connect both services | ✅ Done | API and mock containers communicate over a Docker network |
-| 12 | Connect both services in Kubernetes | ✅ Done | Two API pods and one mock pod deployed; `/ask` returns HTTP 200 with `mock-model-v1` |
-| 13 | Update project documentation | 🟡 In progress | Update README, architecture diagrams, configuration mappings and troubleshooting notes |
-| 14 | Automate two-container integration testing | ✅ Done | CI builds and scans both images, checks container health and verifies a real API-to-mock request |
-| 15 | Add document retrieval | ⬜ Planned | Ingest documents, create embeddings and retrieve relevant context |
-| 16 | Connect a real AI model | ⬜ Planned | Replace predefined mock responses with generated answers |
-| 17 | Add authentication and access controls | ⬜ Planned | Validate user identity and restrict document access |
-| 18 | Create AWS infrastructure with Terraform | ⬜ Planned | Build reproducible cloud networking, identities and supporting services |
-| 19 | Deploy the platform to Amazon EKS | ⬜ Planned | Run the application on AWS Kubernetes |
-| 20 | Add NVIDIA GPU inference | ⬜ Planned | Run and validate GPU-backed model serving |
-| 21 | Add monitoring and operational validation | ⬜ Planned | Collect metrics, build dashboards and test alerts and recovery |
-| 22 | Validate cloud cost controls and teardown | ⬜ Planned | Destroy lab infrastructure and check for leftover chargeable resources |
 
 ### Automated validation
 
