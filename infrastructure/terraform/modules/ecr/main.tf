@@ -1,4 +1,4 @@
-# A repository stores versions of one application's image; it does not run containers.
+# A repository stores versions of one application's image;
 resource "aws_ecr_repository" "this" {
   for_each = var.repositories
   name     = "${var.name_prefix}/${each.key}"
