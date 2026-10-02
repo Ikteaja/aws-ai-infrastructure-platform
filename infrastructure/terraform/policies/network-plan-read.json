@@ -1,0 +1,71 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadNetworkConfiguration",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeVpcs",
+        "ec2:DescribeVpcAttribute",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeRouteTables",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeSecurityGroupRules",
+        "ec2:DescribeFlowLogs",
+        "ec2:DescribeTags"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1"
+        }
+      }
+    },
+    {
+      "Sid": "ReadNetworkEncryptionKey",
+      "Effect": "Allow",
+      "Action": [
+        "kms:DescribeKey",
+        "kms:GetKeyPolicy",
+        "kms:GetKeyRotationStatus",
+        "kms:ListResourceTags"
+      ],
+      "Resource": "arn:aws:kms:eu-central-1:429496640190:key/cb02006b-b487-4f4c-99cc-a793730fa11f"
+    },
+    {
+      "Sid": "ReadFlowLogsRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRoleTags"
+      ],
+      "Resource": "arn:aws:iam::429496640190:role/healthops-dev-vpc-flow-logs"
+    },
+    {
+      "Sid": "DiscoverLogGroups",
+      "Effect": "Allow",
+      "Action": "logs:DescribeLogGroups",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1"
+        }
+      }
+    },
+    {
+      "Sid": "ReadFlowLogGroupTags",
+      "Effect": "Allow",
+      "Action": [
+        "logs:ListTagsForResource",
+        "logs:ListTagsLogGroup"
+      ],
+      "Resource": [
+        "arn:aws:logs:eu-central-1:429496640190:log-group:/aws/vpc/healthops-dev/flow-logs",
+        "arn:aws:logs:eu-central-1:429496640190:log-group:/aws/vpc/healthops-dev/flow-logs:*"
+      ]
+    }
+  ]
+}

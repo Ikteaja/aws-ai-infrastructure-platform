@@ -1,0 +1,46 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadDevRepositories",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:DescribeRepositories",
+        "ecr:ListTagsForResource",
+        "ecr:GetLifecyclePolicy",
+        "ecr:GetRepositoryPolicy"
+      ],
+      "Resource": [
+        "arn:aws:ecr:eu-central-1:429496640190:repository/healthops-dev/api",
+        "arn:aws:ecr:eu-central-1:429496640190:repository/healthops-dev/mock-model"
+      ]
+    },
+    {
+      "Sid": "ReadRegistryScanning",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetRegistryScanningConfiguration"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadDevRegistryKey",
+      "Effect": "Allow",
+      "Action": [
+        "kms:DescribeKey",
+        "kms:GetKeyPolicy",
+        "kms:GetKeyRotationStatus",
+        "kms:ListResourceTags"
+      ],
+      "Resource": "arn:aws:kms:eu-central-1:429496640190:key/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Name": "healthops-dev-ecr-key",
+          "aws:ResourceTag/Project": "healthcare-operations-assistant",
+          "aws:ResourceTag/Environment": "dev",
+          "aws:ResourceTag/Component": "container-registry"
+        }
+      }
+    }
+  ]
+}
