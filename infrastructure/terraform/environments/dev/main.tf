@@ -48,3 +48,22 @@ module "network" {
     Owner       = "Ikteaja"
   }
 }
+
+#Module: ECR
+module "ecr" {
+  source = "../../modules/ecr"
+
+  name_prefix = "healthops-dev"
+
+  repositories = [
+    "api",
+    "mock-model",
+  ]
+
+  tags = {
+    Project     = "healthcare-operations-assistant"
+    Environment = "dev"
+    ManagedBy   = "Terraform"
+    Component   = "container-registry"
+  }
+}
