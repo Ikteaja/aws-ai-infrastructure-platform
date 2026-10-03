@@ -1,30 +1,42 @@
 # Terraform infrastructure
 
-This directory contains reusable Terraform modules and environment-specific configurations for the AI infrastructure platform.
+This directory contains reusable modules and separate administrative and workload Terraform roots.
 
-## Document storage lab
+## State and policy ownership
 
-The `environments/lab` configuration creates a private S3 bucket through the `modules/document-storage` module. The bucket has public access blocked, bucket-owner-enforced ownership, default server-side encryption, and versioning enabled. The lab is intended for synthetic or otherwise approved documents, not patient records or production data.
+| Root | Owns | S3 state key |
+|---|---|---|
+| `bootstrap/` | State bucket, GitHub OIDC, deployment roles and policies | `bootstrap/terraform.tfstate` |
+| `environments/dev/` | Document storage, KMS, networking and Flow Logs workload identity | `dev/terraform.tfstate` |
+
+Deployment permissions remain in bootstrap after initial setup. Workload identities and resource policies stay in their environment modules. ECR is available as a module but is not yet called by dev. The lab is for synthetic or approved documents only.
+
+See the [IAM policy map](../../docs/IAM-POLICY-MAP.md) for every role and policy, import records, monitoring and the controlled change procedure. Files in `policies/` are historical references or future proposals; active deployment policies are under `bootstrap/policies/`.
 
 ### Prerequisites
 
-- Terraform 1.1 or later.
+- Terraform 1.16.x and the committed AWS provider lock files.
 - AWS credentials configured through the AWS CLI, environment variables, or another supported credential provider. Do not put credentials in Terraform files.
 - A globally unique S3 bucket name that meets AWS naming rules.
 
 ### Initialize and review
 
-From `infrastructure/terraform/environments/lab` in PowerShell:
+From `infrastructure/terraform/environments/dev` in PowerShell:
 
 ```powershell
-Copy-Item terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars and choose a globally unique bucket name.
+$env:TF_VAR_aws_account_id = '429496640190'
+$env:TF_VAR_aws_region = 'eu-central-1'
+$env:TF_VAR_document_bucket_name = 'healthops-dev-documents-429496640190'
 terraform init
 terraform fmt -recursive
 terraform validate
-terraform plan
+terraform plan -out=reviewed.tfplan
 ```
 
-Review the plan before applying it. To create the lab bucket, run `terraform apply`. To remove it later, run `terraform destroy`. The bucket is not force-destroyed by default; remove its objects deliberately before destroying it.
+Local `terraform.tfvars` values override environment variables. Ensure any local
+file matches the account and bucket above; an old example bucket name can propose
+replacement of the deployed document bucket.
 
-Terraform state can contain infrastructure metadata and must be kept private. This lab uses Terraform's default local state; do not commit state files or the populated `terraform.tfvars` file.
+Review a saved plan before applying it. Bootstrap administration uses temporary SSO credentials; GitHub uses separate dev plan/apply roles. Normal dev deployments use the existing manually requested saved-plan apply workflow. Never destroy bootstrap as part of workload cleanup.
+
+Both roots use separate S3 state keys and native locking. State can contain sensitive metadata; never commit state, saved plans, credentials or populated tfvars.

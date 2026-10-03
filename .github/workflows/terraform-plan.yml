@@ -33,6 +33,13 @@ env:
   TF_VAR_document_bucket_name: "healthops-dev-documents-429496640190"
 
 jobs:
+  # Validate administrative IAM configuration without AWS credentials.
+  iam-checks:
+    name: Bootstrap IAM checks
+    uses: ./.github/workflows/iam-checks.yml
+    permissions:
+      contents: read
+
   # JOB 1: Validate and scan configuration without AWS credentials.
   checks:
     name: Format, validate, and scan
@@ -98,7 +105,7 @@ jobs:
   # JOB 2: Generate the Terraform plan and report recorded AWS spending.
   plan:
     name: Generate development plan
-    needs: checks
+    needs: [checks, iam-checks]
 
     # Allow AWS-connected PR plans only for the configured lab owner.
     # Reject fork PRs, bot PRs, and runs started by other users.
@@ -404,7 +411,7 @@ jobs:
   # Enforcing this result before merge requires repository protection settings.
   review-gate:
     name: Terraform review gate
-    needs: [checks, plan]
+    needs: [checks, iam-checks, plan]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -414,12 +421,13 @@ jobs:
       - name: Require successful checks, plan, and AWS spending report
         env:
           CHECKS_RESULT: ${{ needs.checks.result }}
+          IAM_RESULT: ${{ needs.iam-checks.result }}
           PLAN_RESULT: ${{ needs.plan.result }}
         run: |
-          if [ "$CHECKS_RESULT" != "success" ] || [ "$PLAN_RESULT" != "success" ]; then
-            echo "::error::Review failed: checks=$CHECKS_RESULT; plan-and-aws-costs=$PLAN_RESULT."
+          if [ "$CHECKS_RESULT" != "success" ] || [ "$IAM_RESULT" != "success" ] || [ "$PLAN_RESULT" != "success" ]; then
+            echo "::error::Review failed: checks=$CHECKS_RESULT; iam=$IAM_RESULT; plan-and-aws-costs=$PLAN_RESULT."
             echo "Skipped, failed, or cancelled jobs do not satisfy this gate."
             exit 1
           fi
 
-          echo "Validation, security scans, Terraform plan and AWS spending report succeeded."
+          echo "Validation, security scans, bootstrap IAM checks, Terraform plan and AWS spending report succeeded."

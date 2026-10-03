@@ -1,0 +1,79 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CreateTaggedDevelopmentKey",
+      "Effect": "Allow",
+      "Action": "kms:CreateKey",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1",
+          "aws:RequestTag/Name": "healthops-dev-documents-429496640190-key",
+          "aws:RequestTag/Project": "healthcare-operations-assistant",
+          "aws:RequestTag/Environment": "dev",
+          "kms:KeyUsage": "ENCRYPT_DECRYPT",
+          "kms:KeySpec": "SYMMETRIC_DEFAULT"
+        },
+        "Bool": {
+          "kms:BypassPolicyLockoutSafetyCheck": "false"
+        },
+        "ForAllValues:StringEquals": {
+          "aws:TagKeys": [
+            "Name",
+            "Project",
+            "Environment",
+            "ManagedBy",
+            "DataType",
+            "Component"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "TagDevelopmentKeyDuringCreation",
+      "Effect": "Allow",
+      "Action": "kms:TagResource",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1",
+          "aws:RequestTag/Name": "healthops-dev-documents-429496640190-key",
+          "aws:RequestTag/Project": "healthcare-operations-assistant",
+          "aws:RequestTag/Environment": "dev"
+        },
+        "ForAllValues:StringEquals": {
+          "aws:TagKeys": [
+            "Name",
+            "Project",
+            "Environment",
+            "ManagedBy",
+            "DataType",
+            "Component"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "ManageTaggedDevelopmentKey",
+      "Effect": "Allow",
+      "Action": [
+        "kms:DescribeKey",
+        "kms:GetKeyPolicy",
+        "kms:GetKeyRotationStatus",
+        "kms:ListResourceTags",
+        "kms:EnableKeyRotation",
+        "kms:UpdateKeyDescription",
+        "kms:PutKeyPolicy"
+      ],
+      "Resource": "arn:aws:kms:eu-central-1:429496640190:key/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Name": "healthops-dev-documents-429496640190-key",
+          "aws:ResourceTag/Project": "healthcare-operations-assistant",
+          "aws:ResourceTag/Environment": "dev"
+        }
+      }
+    }
+  ]
+}

@@ -2,6 +2,11 @@
 
 ## Goal
 
+Bootstrap also owns the GitHub OIDC provider, Terraform plan/apply roles and
+their deployment policies. Workload permissions remain in environment modules.
+See the [IAM policy map](../../../docs/IAM-POLICY-MAP.md) for imports, ownership,
+policy purposes, controlled changes and drift monitoring.
+
 Store Terraform infrastructure records securely in S3 so local
 planning and pipeline deployments use the same state.
 

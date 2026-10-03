@@ -1,0 +1,54 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListStateBucket",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::healthops-tfstate-429496640190-eu-central-1"
+    },
+    {
+      "Sid": "ReadAndWriteDevelopmentState",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::healthops-tfstate-429496640190-eu-central-1/dev/terraform.tfstate"
+    },
+    {
+      "Sid": "ManageDevelopmentStateLock",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::healthops-tfstate-429496640190-eu-central-1/dev/terraform.tfstate.tflock"
+    },
+    {
+      "Sid": "ReadDevelopmentBucketConfiguration",
+      "Effect": "Allow",
+      "Action": [
+        "s3:Get*",
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::healthops-dev-documents-429496640190"
+    },
+    {
+      "Sid": "ConfigureDevelopmentDocumentBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:PutBucketTagging",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutBucketOwnershipControls",
+        "s3:PutBucketVersioning",
+        "s3:PutEncryptionConfiguration",
+        "s3:PutBucketPolicy",
+        "s3:PutLifecycleConfiguration"
+      ],
+      "Resource": "arn:aws:s3:::healthops-dev-documents-429496640190"
+    }
+  ]
+}

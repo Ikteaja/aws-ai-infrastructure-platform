@@ -1,0 +1,14 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageDevDocumentBucketNotifications",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucketNotification",
+        "s3:PutBucketNotification"
+      ],
+      "Resource": "arn:aws:s3:::healthops-dev-documents-429496640190"
+    }
+  ]
+}

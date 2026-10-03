@@ -31,6 +31,7 @@ credentials
 Thumbs.db
 # Generated local document-ingestion state.
 /.local/ingestion/
+/.local/iam/
 ########Terraform Configuration###################
 # Downloaded Terraform providers and working data.
 **/.terraform/
