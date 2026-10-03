@@ -1,0 +1,102 @@
+{
+  "account": "429496640190",
+  "captured_at": "2026-10-03T20:17:39.792734+00:00",
+  "resources": [
+    {
+      "root": "bootstrap",
+      "address": "aws_iam_role.terraform_plan",
+      "import_id": "healthops-dev-terraform-plan-permissions",
+      "purpose": "GitHub Actions Terraform plan"
+    },
+    {
+      "root": "bootstrap",
+      "address": "aws_iam_role_policy.terraform_plan_cost_reporting",
+      "import_id": "healthops-dev-terraform-plan-permissions:healthops-dev-cost-reporting",
+      "purpose": "plan inline policy"
+    },
+    {
+      "root": "bootstrap",
+      "address": "aws_iam_role_policy.terraform_plan_kms",
+      "import_id": "healthops-dev-terraform-plan-permissions:healthops-dev-kms-plan",
+      "purpose": "plan inline policy"
+    },
+    {
+      "root": "bootstrap",
+      "address": "aws_iam_role_policy.terraform_plan_permissions",
+      "import_id": "healthops-dev-terraform-plan-permissions:healthops-dev-terraform-plan-permissions",
+      "purpose": "plan inline policy"
+    },
+    {
+      "root": "bootstrap",
+      "address": "aws_iam_role.terraform_apply",
+      "import_id": "healthops-dev-terraform-apply",
+      "purpose": "GitHub Actions Terraform apply"
+    },
+    {
+      "root": "bootstrap",
+      "address": "aws_iam_role_policy.kms_apply",
+      "import_id": "healthops-dev-terraform-apply:healthops-dev-kms-apply",
+      "purpose": "apply inline policy"
+    },
+    {
+      "root": "bootstrap",
+      "address": "aws_iam_role_policy.network_apply",
+      "import_id": "healthops-dev-terraform-apply:healthops-dev-network-apply",
+      "purpose": "apply inline policy"
+    },
+    {
+      "root": "bootstrap",
+      "address": "aws_iam_role_policy.terraform_apply",
+      "import_id": "healthops-dev-terraform-apply:healthops-dev-terraform-apply",
+      "purpose": "apply inline policy"
+    },
+    {
+      "root": "bootstrap",
+      "address": "aws_iam_role_policy.terraform_apply_permissions",
+      "import_id": "healthops-dev-terraform-apply:healthops-dev-terraform-apply-permissions",
+      "purpose": "apply inline policy"
+    },
+    {
+      "root": "bootstrap",
+      "address": "aws_iam_policy.network_plan_read",
+      "import_id": "arn:aws:iam::429496640190:policy/healthops-dev-network-plan-read",
+      "purpose": "Network read policy; currently unattached"
+    },
+    {
+      "root": "bootstrap",
+      "address": "aws_iam_openid_connect_provider.github",
+      "import_id": "arn:aws:iam::429496640190:oidc-provider/token.actions.githubusercontent.com",
+      "purpose": "Shared GitHub federation provider"
+    },
+    {
+      "root": "environments/dev",
+      "address": "module.network.aws_iam_role.vpc_flow_logs",
+      "import_id": "healthops-dev-vpc-flow-logs",
+      "purpose": "Already managed: VPC Flow Logs service identity"
+    },
+    {
+      "root": "environments/dev",
+      "address": "module.network.aws_iam_role_policy.vpc_flow_logs",
+      "import_id": "healthops-dev-vpc-flow-logs:healthops-dev-vpc-flow-logs-publish",
+      "purpose": "Already managed: publish network metadata to CloudWatch"
+    }
+  ],
+  "excluded_roles": [
+    "AWSReservedSSO_AdministratorAccess_4af4e9b42a20d275",
+    "AWSServiceRoleForOrganizations",
+    "AWSServiceRoleForResourceExplorer",
+    "AWSServiceRoleForSSO",
+    "AWSServiceRoleForSupport",
+    "AWSServiceRoleForTrustedAdvisor"
+  ],
+  "adoption": {
+    "date": "2026-10-03",
+    "imported": 11,
+    "added": 0,
+    "changed": 0,
+    "destroyed": 0,
+    "bootstrap_post_import_plan": "no changes",
+    "post_import_iam_inventory": "matches adoption baseline",
+    "dev_verification_plan": "no changes after correcting ignored local example bucket value"
+  }
+}

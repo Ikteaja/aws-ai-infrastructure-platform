@@ -88,6 +88,10 @@ sequenceDiagram
 
 ## Project progress
 
+IAM ownership, role/policy purposes, import records and controlled change procedures
+are documented in the [IAM policy map](docs/IAM-POLICY-MAP.md).
+Bootstrap owns deployment access; environment modules own workload permissions.
+
 The API and mock model communicate successfully in Docker and local
 Kubernetes. Application CI tests both services and verifies a real
 API-to-model request.

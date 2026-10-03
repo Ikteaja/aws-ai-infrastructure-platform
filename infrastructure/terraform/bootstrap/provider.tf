@@ -14,3 +14,11 @@ provider "aws" {
     }
   }
 }
+
+# Preserve existing IAM tags during adoption. State-bucket default tags must
+# not silently rewrite shared identities or imported policies.
+provider "aws" {
+  alias               = "iam"
+  region              = "eu-central-1"
+  allowed_account_ids = ["429496640190"]
+}

@@ -1,5 +1,11 @@
 # Terraform pull-request planning and cost reporting
 
+> Historical workflow setup notes. Deployment roles and policies are now managed
+> by Terraform bootstrap. Follow [IAM-POLICY-MAP.md](IAM-POLICY-MAP.md) for current
+> ownership and permission changes instead of the manual IAM update commands below.
+> The current workflow reports recorded Cost Explorer spending; older Infracost
+> instructions here do not describe the active workflow.
+
 Prepared for Ikteaja/aws-ai-infrastructure-platform on 30 September 2026.
 
 ## 1. What changes
@@ -29,8 +35,8 @@ Reference: https://docs.github.com/en/repositories/configuring-branches-and-merg
 The ZIP has these repository-relative paths:
 
 - `.github/workflows/terraform-plan.yml`: replace the existing plan workflow.
-- `infrastructure/terraform/policies/plan-role-trust.json`: reviewed planning-role trust policy.
-- `infrastructure/terraform/policies/cost-reporting-policy.json`: additional inline permission policy.
+- `infrastructure/terraform/bootstrap/policies/plan/trust.json`: reviewed planning-role trust policy.
+- `infrastructure/terraform/bootstrap/policies/plan/healthops-dev-cost-reporting.json`: additional inline permission policy.
 - `docs/terraform-pr-costs.md`: these instructions.
 
 Use your current feature branch or create a workflow branch from it if it contains the pending network changes. Check `git status` before extracting into the repository and review the workflow diff afterwards. Do not overwrite unrelated uncommitted changes. Do not create a second planning workflow with a different filename.
@@ -102,28 +108,7 @@ Your supplied trust policy uses immutable owner and repository IDs. The included
 
 It does not add a wildcard repository/branch trust. The apply role remains main-only.
 
-```powershell
-# Run from the repository root after placing the package files.
-Set-Location "C:\Users\iktea\.vscode\aws-ai-infrastructure-platform"
-aws sso login --profile ai-lab-admin
-
-# Allow the planning role to trust main and this repository's PR context.
-aws iam update-assume-role-policy `
-    --role-name healthops-dev-terraform-plan-permissions `
-    --policy-document file://infrastructure/terraform/policies/plan-role-trust.json `
-    --profile ai-lab-admin `
-    --no-cli-pager
-
-# Add cost-reporting permission without replacing existing policies.
-aws iam put-role-policy `
-    --role-name healthops-dev-terraform-plan-permissions `
-    --policy-name healthops-dev-cost-reporting `
-    --policy-document file://infrastructure/terraform/policies/cost-reporting-policy.json `
-    --profile ai-lab-admin `
-    --no-cli-pager
-```
-
-Check each command succeeds before the next. These modify role configuration; they do not create compute or networking resources. No new AWS resource tags are required for these inline-policy updates.
+Trust and cost-reporting permissions are now managed in Terraform bootstrap. Follow the saved-plan review procedure in [IAM-POLICY-MAP.md](IAM-POLICY-MAP.md); do not update them with manual IAM commands.
 
 Important security boundary: AWS trusts the repo PR subject, not the workflow's author check. The owner-only/same-repo conditions are defense in depth in editable workflow code. Keep repository write access limited to trusted people. Terraform plans can execute provider/data-source code and read sensitive remote state. Do not grant the planning role infrastructure-write access. Keep only the necessary state-lock write permissions. Reassess this design if external collaborators are introduced. Do not switch to pull_request_target to run untrusted Terraform.
 
@@ -152,8 +137,8 @@ git diff -- .github/workflows/terraform-plan.yml
 git status --short
 
 git add .github/workflows/terraform-plan.yml `
-    infrastructure/terraform/policies/plan-role-trust.json `
-    infrastructure/terraform/policies/cost-reporting-policy.json `
+    infrastructure/terraform/bootstrap/policies/plan/trust.json `
+    infrastructure/terraform/bootstrap/policies/plan/healthops-dev-cost-reporting.json `
     docs/terraform-pr-costs.md
 
 git diff --cached --check

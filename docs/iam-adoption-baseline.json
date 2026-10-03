@@ -1,0 +1,729 @@
+{
+  "account": "429496640190",
+  "captured_at": "2026-10-03T20:17:39.792734+00:00",
+  "roles": {
+    "healthops-dev-terraform-apply": {
+      "Path": "/",
+      "RoleName": "healthops-dev-terraform-apply",
+      "RoleId": "AROAWH776UK7AY5GT7V4L",
+      "Arn": "arn:aws:iam::429496640190:role/healthops-dev-terraform-apply",
+      "CreateDate": "2026-09-27T20:52:25+00:00",
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Federated": "arn:aws:iam::429496640190:oidc-provider/token.actions.githubusercontent.com"
+            },
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {
+              "StringEquals": {
+                "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                "token.actions.githubusercontent.com:sub": "repo:Ikteaja@56071290/aws-ai-infrastructure-platform@1361265436:ref:refs/heads/main"
+              }
+            }
+          }
+        ]
+      },
+      "Description": "healthops-dev-terraform-apply-permissions",
+      "MaxSessionDuration": 3600,
+      "Tags": [
+        {
+          "Key": "Name",
+          "Value": "healthops-dev-terraform-plan"
+        },
+        {
+          "Key": "Project",
+          "Value": "healthcare-operations-assistant"
+        },
+        {
+          "Key": "Environment",
+          "Value": "dev"
+        },
+        {
+          "Key": "Component",
+          "Value": "terraform-plan"
+        },
+        {
+          "Key": "ManagedBy",
+          "Value": "Manual"
+        },
+        {
+          "Key": "Owner",
+          "Value": "Ikteaja"
+        }
+      ],
+      "InlinePolicies": {
+        "healthops-dev-kms-apply": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "CreateTaggedDevelopmentKey",
+              "Effect": "Allow",
+              "Action": "kms:CreateKey",
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": "eu-central-1",
+                  "aws:RequestTag/Name": "healthops-dev-documents-429496640190-key",
+                  "aws:RequestTag/Project": "healthcare-operations-assistant",
+                  "aws:RequestTag/Environment": "dev",
+                  "kms:KeyUsage": "ENCRYPT_DECRYPT",
+                  "kms:KeySpec": "SYMMETRIC_DEFAULT"
+                },
+                "Bool": {
+                  "kms:BypassPolicyLockoutSafetyCheck": "false"
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "Project",
+                    "Environment",
+                    "ManagedBy",
+                    "DataType",
+                    "Component"
+                  ]
+                }
+              }
+            },
+            {
+              "Sid": "TagDevelopmentKeyDuringCreation",
+              "Effect": "Allow",
+              "Action": "kms:TagResource",
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": "eu-central-1",
+                  "aws:RequestTag/Name": "healthops-dev-documents-429496640190-key",
+                  "aws:RequestTag/Project": "healthcare-operations-assistant",
+                  "aws:RequestTag/Environment": "dev"
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "Project",
+                    "Environment",
+                    "ManagedBy",
+                    "DataType",
+                    "Component"
+                  ]
+                }
+              }
+            },
+            {
+              "Sid": "ManageTaggedDevelopmentKey",
+              "Effect": "Allow",
+              "Action": [
+                "kms:DescribeKey",
+                "kms:GetKeyPolicy",
+                "kms:GetKeyRotationStatus",
+                "kms:ListResourceTags",
+                "kms:EnableKeyRotation",
+                "kms:UpdateKeyDescription",
+                "kms:PutKeyPolicy"
+              ],
+              "Resource": "arn:aws:kms:eu-central-1:429496640190:key/*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:ResourceTag/Name": "healthops-dev-documents-429496640190-key",
+                  "aws:ResourceTag/Project": "healthcare-operations-assistant",
+                  "aws:ResourceTag/Environment": "dev"
+                }
+              }
+            }
+          ]
+        },
+        "healthops-dev-network-apply": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "ReadRegionalNetworkConfiguration",
+              "Effect": "Allow",
+              "Action": [
+                "ec2:DescribeVpcs",
+                "ec2:DescribeVpcAttribute",
+                "ec2:DescribeSubnets",
+                "ec2:DescribeRouteTables",
+                "ec2:DescribeSecurityGroups",
+                "ec2:DescribeSecurityGroupRules",
+                "ec2:DescribeNetworkAcls",
+                "ec2:DescribeFlowLogs",
+                "ec2:DescribeTags",
+                "ec2:DescribeAvailabilityZones"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": "eu-central-1"
+                }
+              }
+            },
+            {
+              "Sid": "ConfigureRegionalNetworkFoundation",
+              "Effect": "Allow",
+              "Action": [
+                "ec2:CreateVpc",
+                "ec2:ModifyVpcAttribute",
+                "ec2:CreateSubnet",
+                "ec2:ModifySubnetAttribute",
+                "ec2:CreateRouteTable",
+                "ec2:AssociateRouteTable",
+                "ec2:DisassociateRouteTable",
+                "ec2:ReplaceRouteTableAssociation",
+                "ec2:RevokeSecurityGroupIngress",
+                "ec2:RevokeSecurityGroupEgress",
+                "ec2:CreateFlowLogs",
+                "ec2:CreateTags",
+                "ec2:DeleteTags"
+              ],
+              "Resource": [
+                "arn:aws:ec2:eu-central-1:429496640190:vpc/*",
+                "arn:aws:ec2:eu-central-1:429496640190:subnet/*",
+                "arn:aws:ec2:eu-central-1:429496640190:route-table/*",
+                "arn:aws:ec2:eu-central-1:429496640190:security-group/*",
+                "arn:aws:ec2:eu-central-1:429496640190:vpc-flow-log/*"
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": "eu-central-1"
+                }
+              }
+            },
+            {
+              "Sid": "CreateDevelopmentFlowLogKey",
+              "Effect": "Allow",
+              "Action": "kms:CreateKey",
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": "eu-central-1",
+                  "aws:RequestTag/Name": "healthops-dev-vpc-flow-logs-key",
+                  "aws:RequestTag/Project": "healthcare-operations-assistant",
+                  "aws:RequestTag/Environment": "dev",
+                  "aws:RequestTag/ManagedBy": "Terraform",
+                  "aws:RequestTag/Component": "network-flow-logs",
+                  "aws:RequestTag/Owner": "Ikteaja",
+                  "kms:KeyUsage": "ENCRYPT_DECRYPT",
+                  "kms:KeySpec": "SYMMETRIC_DEFAULT"
+                },
+                "Bool": {
+                  "kms:BypassPolicyLockoutSafetyCheck": "false"
+                }
+              }
+            },
+            {
+              "Sid": "TagDevelopmentFlowLogKeyDuringCreation",
+              "Effect": "Allow",
+              "Action": "kms:TagResource",
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": "eu-central-1",
+                  "aws:RequestTag/Name": "healthops-dev-vpc-flow-logs-key",
+                  "aws:RequestTag/Project": "healthcare-operations-assistant",
+                  "aws:RequestTag/Environment": "dev",
+                  "aws:RequestTag/ManagedBy": "Terraform",
+                  "aws:RequestTag/Component": "network-flow-logs",
+                  "aws:RequestTag/Owner": "Ikteaja"
+                }
+              }
+            },
+            {
+              "Sid": "ManageDevelopmentFlowLogKey",
+              "Effect": "Allow",
+              "Action": [
+                "kms:DescribeKey",
+                "kms:GetKeyPolicy",
+                "kms:GetKeyRotationStatus",
+                "kms:ListResourceTags",
+                "kms:EnableKeyRotation",
+                "kms:UpdateKeyDescription",
+                "kms:PutKeyPolicy"
+              ],
+              "Resource": "arn:aws:kms:eu-central-1:429496640190:key/*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:ResourceTag/Name": "healthops-dev-vpc-flow-logs-key",
+                  "aws:ResourceTag/Project": "healthcare-operations-assistant",
+                  "aws:ResourceTag/Environment": "dev",
+                  "aws:ResourceTag/Component": "network-flow-logs"
+                }
+              }
+            },
+            {
+              "Sid": "ManageSpecificFlowLogRole",
+              "Effect": "Allow",
+              "Action": [
+                "iam:CreateRole",
+                "iam:GetRole",
+                "iam:UpdateAssumeRolePolicy",
+                "iam:UpdateRole",
+                "iam:UpdateRoleDescription",
+                "iam:TagRole",
+                "iam:UntagRole",
+                "iam:ListRoleTags",
+                "iam:ListRolePolicies",
+                "iam:ListAttachedRolePolicies",
+                "iam:GetRolePolicy",
+                "iam:PutRolePolicy",
+                "iam:DeleteRolePolicy"
+              ],
+              "Resource": "arn:aws:iam::429496640190:role/healthops-dev-vpc-flow-logs"
+            },
+            {
+              "Sid": "PassSpecificRoleToVpcFlowLogs",
+              "Effect": "Allow",
+              "Action": "iam:PassRole",
+              "Resource": "arn:aws:iam::429496640190:role/healthops-dev-vpc-flow-logs",
+              "Condition": {
+                "StringEquals": {
+                  "iam:PassedToService": "vpc-flow-logs.amazonaws.com"
+                }
+              }
+            },
+            {
+              "Sid": "ReadRegionalLogGroupInventory",
+              "Effect": "Allow",
+              "Action": "logs:DescribeLogGroups",
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": "eu-central-1"
+                }
+              }
+            },
+            {
+              "Sid": "ConfigureSpecificFlowLogGroup",
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogGroup",
+                "logs:PutRetentionPolicy",
+                "logs:AssociateKmsKey",
+                "logs:ListTagsLogGroup",
+                "logs:ListTagsForResource",
+                "logs:TagLogGroup",
+                "logs:TagResource",
+                "logs:UntagLogGroup",
+                "logs:UntagResource"
+              ],
+              "Resource": [
+                "arn:aws:logs:eu-central-1:429496640190:log-group:/aws/vpc/healthops-dev/flow-logs",
+                "arn:aws:logs:eu-central-1:429496640190:log-group:/aws/vpc/healthops-dev/flow-logs:*"
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": "eu-central-1"
+                }
+              }
+            }
+          ]
+        },
+        "healthops-dev-terraform-apply": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "ManageDevDocumentBucketNotifications",
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetBucketNotification",
+                "s3:PutBucketNotification"
+              ],
+              "Resource": "arn:aws:s3:::healthops-dev-documents-429496640190"
+            }
+          ]
+        },
+        "healthops-dev-terraform-apply-permissions": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "ListStateBucket",
+              "Effect": "Allow",
+              "Action": "s3:ListBucket",
+              "Resource": "arn:aws:s3:::healthops-tfstate-429496640190-eu-central-1"
+            },
+            {
+              "Sid": "ReadAndWriteDevelopmentState",
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObject",
+                "s3:PutObject"
+              ],
+              "Resource": "arn:aws:s3:::healthops-tfstate-429496640190-eu-central-1/dev/terraform.tfstate"
+            },
+            {
+              "Sid": "ManageDevelopmentStateLock",
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObject",
+                "s3:PutObject",
+                "s3:DeleteObject"
+              ],
+              "Resource": "arn:aws:s3:::healthops-tfstate-429496640190-eu-central-1/dev/terraform.tfstate.tflock"
+            },
+            {
+              "Sid": "ReadDevelopmentBucketConfiguration",
+              "Effect": "Allow",
+              "Action": [
+                "s3:Get*",
+                "s3:ListBucket"
+              ],
+              "Resource": "arn:aws:s3:::healthops-dev-documents-429496640190"
+            },
+            {
+              "Sid": "ConfigureDevelopmentDocumentBucket",
+              "Effect": "Allow",
+              "Action": [
+                "s3:CreateBucket",
+                "s3:PutBucketTagging",
+                "s3:PutBucketPublicAccessBlock",
+                "s3:PutBucketOwnershipControls",
+                "s3:PutBucketVersioning",
+                "s3:PutEncryptionConfiguration",
+                "s3:PutBucketPolicy",
+                "s3:PutLifecycleConfiguration"
+              ],
+              "Resource": "arn:aws:s3:::healthops-dev-documents-429496640190"
+            }
+          ]
+        }
+      },
+      "AttachedPolicies": []
+    },
+    "healthops-dev-terraform-plan-permissions": {
+      "Path": "/",
+      "RoleName": "healthops-dev-terraform-plan-permissions",
+      "RoleId": "AROAWH776UK7DSJDU7MNZ",
+      "Arn": "arn:aws:iam::429496640190:role/healthops-dev-terraform-plan-permissions",
+      "CreateDate": "2026-09-27T20:31:14+00:00",
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Federated": "arn:aws:iam::429496640190:oidc-provider/token.actions.githubusercontent.com"
+            },
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {
+              "StringEquals": {
+                "token.actions.githubusercontent.com:sub": [
+                  "repo:Ikteaja@56071290/aws-ai-infrastructure-platform@1361265436:ref:refs/heads/main",
+                  "repo:Ikteaja@56071290/aws-ai-infrastructure-platform@1361265436:pull_request"
+                ],
+                "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+              }
+            }
+          }
+        ]
+      },
+      "Description": "Allows GitHub Actions to plan Terraform changes in dev.",
+      "MaxSessionDuration": 3600,
+      "Tags": [
+        {
+          "Key": "Name",
+          "Value": "healthops-dev-terraform-plan"
+        },
+        {
+          "Key": "Project",
+          "Value": "healthcare-operations-assistant"
+        },
+        {
+          "Key": "Environment",
+          "Value": "dev"
+        },
+        {
+          "Key": "Component",
+          "Value": "terraform-plan"
+        },
+        {
+          "Key": "ManagedBy",
+          "Value": "manual"
+        },
+        {
+          "Key": "Owner",
+          "Value": "Ikteaja"
+        }
+      ],
+      "InlinePolicies": {
+        "healthops-dev-cost-reporting": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "ReadAccountCostAndUsage",
+              "Effect": "Allow",
+              "Action": "ce:GetCostAndUsage",
+              "Resource": "*"
+            }
+          ]
+        },
+        "healthops-dev-kms-plan": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "ReadDocumentEncryptionKey",
+              "Effect": "Allow",
+              "Action": [
+                "kms:DescribeKey",
+                "kms:GetKeyPolicy",
+                "kms:GetKeyRotationStatus",
+                "kms:ListResourceTags"
+              ],
+              "Resource": "arn:aws:kms:eu-central-1:429496640190:key/*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:ResourceTag/Name": "healthops-dev-documents-429496640190-key",
+                  "aws:ResourceTag/Project": "healthcare-operations-assistant",
+                  "aws:ResourceTag/Environment": "dev"
+                }
+              }
+            }
+          ]
+        },
+        "healthops-dev-terraform-plan-permissions": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "ListStateBucket",
+              "Effect": "Allow",
+              "Action": "s3:ListBucket",
+              "Resource": "arn:aws:s3:::healthops-tfstate-429496640190-eu-central-1"
+            },
+            {
+              "Sid": "ReadDevelopmentState",
+              "Effect": "Allow",
+              "Action": "s3:GetObject",
+              "Resource": "arn:aws:s3:::healthops-tfstate-429496640190-eu-central-1/dev/terraform.tfstate"
+            },
+            {
+              "Sid": "ManageDevelopmentStateLock",
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObject",
+                "s3:PutObject",
+                "s3:DeleteObject"
+              ],
+              "Resource": "arn:aws:s3:::healthops-tfstate-429496640190-eu-central-1/dev/terraform.tfstate.tflock"
+            },
+            {
+              "Sid": "ReadDevelopmentBucketConfiguration",
+              "Effect": "Allow",
+              "Action": [
+                "s3:Get*",
+                "s3:ListBucket"
+              ],
+              "Resource": "arn:aws:s3:::healthops-dev-documents-429496640190"
+            }
+          ]
+        }
+      },
+      "AttachedPolicies": []
+    },
+    "healthops-dev-vpc-flow-logs": {
+      "Path": "/",
+      "RoleName": "healthops-dev-vpc-flow-logs",
+      "RoleId": "AROAWH776UK7P7LXRNCVS",
+      "Arn": "arn:aws:iam::429496640190:role/healthops-dev-vpc-flow-logs",
+      "CreateDate": "2026-10-01T11:24:12+00:00",
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "vpc-flow-logs.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "MaxSessionDuration": 3600,
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "healthcare-operations-assistant"
+        },
+        {
+          "Key": "Owner",
+          "Value": "Ikteaja"
+        },
+        {
+          "Key": "Component",
+          "Value": "network"
+        },
+        {
+          "Key": "Environment",
+          "Value": "dev"
+        },
+        {
+          "Key": "ManagedBy",
+          "Value": "Terraform"
+        }
+      ],
+      "InlinePolicies": {
+        "healthops-dev-vpc-flow-logs-publish": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Action": "logs:DescribeLogGroups",
+              "Effect": "Allow",
+              "Resource": "*"
+            },
+            {
+              "Action": [
+                "logs:PutLogEvents",
+                "logs:DescribeLogStreams",
+                "logs:CreateLogStream"
+              ],
+              "Effect": "Allow",
+              "Resource": "arn:aws:logs:eu-central-1:429496640190:log-group:/aws/vpc/healthops-dev/flow-logs:*"
+            }
+          ]
+        }
+      },
+      "AttachedPolicies": []
+    }
+  },
+  "managed_policies": {
+    "arn:aws:iam::429496640190:policy/healthops-dev-network-plan-read": {
+      "PolicyName": "healthops-dev-network-plan-read",
+      "PolicyId": "ANPAWH776UK7GX3EJIF7E",
+      "Arn": "arn:aws:iam::429496640190:policy/healthops-dev-network-plan-read",
+      "Path": "/",
+      "DefaultVersionId": "v1",
+      "AttachmentCount": 0,
+      "PermissionsBoundaryUsageCount": 0,
+      "IsAttachable": true,
+      "Description": "Read existing dev networking during Terraform planning",
+      "CreateDate": "2026-10-01T14:56:13+00:00",
+      "UpdateDate": "2026-10-01T14:56:13+00:00",
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "healthcare-operations-assistant"
+        },
+        {
+          "Key": "Environment",
+          "Value": "dev"
+        },
+        {
+          "Key": "Owner",
+          "Value": "Ikteaja"
+        },
+        {
+          "Key": "ManagedBy",
+          "Value": "ManualBootstrap"
+        }
+      ],
+      "Document": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "ReadNetworkConfiguration",
+            "Effect": "Allow",
+            "Action": [
+              "ec2:DescribeVpcs",
+              "ec2:DescribeVpcAttribute",
+              "ec2:DescribeSubnets",
+              "ec2:DescribeRouteTables",
+              "ec2:DescribeSecurityGroups",
+              "ec2:DescribeSecurityGroupRules",
+              "ec2:DescribeFlowLogs",
+              "ec2:DescribeTags"
+            ],
+            "Resource": "*",
+            "Condition": {
+              "StringEquals": {
+                "aws:RequestedRegion": "eu-central-1"
+              }
+            }
+          },
+          {
+            "Sid": "ReadNetworkEncryptionKey",
+            "Effect": "Allow",
+            "Action": [
+              "kms:DescribeKey",
+              "kms:GetKeyPolicy",
+              "kms:GetKeyRotationStatus",
+              "kms:ListResourceTags"
+            ],
+            "Resource": "arn:aws:kms:eu-central-1:429496640190:key/cb02006b-b487-4f4c-99cc-a793730fa11f"
+          },
+          {
+            "Sid": "ReadFlowLogsRole",
+            "Effect": "Allow",
+            "Action": [
+              "iam:GetRole",
+              "iam:GetRolePolicy",
+              "iam:ListRolePolicies",
+              "iam:ListAttachedRolePolicies",
+              "iam:ListRoleTags"
+            ],
+            "Resource": "arn:aws:iam::429496640190:role/healthops-dev-vpc-flow-logs"
+          },
+          {
+            "Sid": "DiscoverLogGroups",
+            "Effect": "Allow",
+            "Action": "logs:DescribeLogGroups",
+            "Resource": "*",
+            "Condition": {
+              "StringEquals": {
+                "aws:RequestedRegion": "eu-central-1"
+              }
+            }
+          },
+          {
+            "Sid": "ReadFlowLogGroupTags",
+            "Effect": "Allow",
+            "Action": [
+              "logs:ListTagsForResource",
+              "logs:ListTagsLogGroup"
+            ],
+            "Resource": [
+              "arn:aws:logs:eu-central-1:429496640190:log-group:/aws/vpc/healthops-dev/flow-logs",
+              "arn:aws:logs:eu-central-1:429496640190:log-group:/aws/vpc/healthops-dev/flow-logs:*"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "oidc_providers": {
+    "arn:aws:iam::429496640190:oidc-provider/token.actions.githubusercontent.com": {
+      "Url": "token.actions.githubusercontent.com",
+      "ClientIDList": [
+        "sts.amazonaws.com"
+      ],
+      "ThumbprintList": [
+        "ab9d0263244dd0326eb67015705a667e79cfe998"
+      ],
+      "CreateDate": "2026-09-27T19:45:11.117000+00:00",
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "healthcare-operations-assistant"
+        },
+        {
+          "Key": "Environment",
+          "Value": "shared"
+        },
+        {
+          "Key": "ManagedBy",
+          "Value": "manual"
+        },
+        {
+          "Key": "Name",
+          "Value": "github-actions-oidc"
+        }
+      ]
+    }
+  },
+  "excluded_roles": [
+    "AWSReservedSSO_AdministratorAccess_4af4e9b42a20d275",
+    "AWSServiceRoleForOrganizations",
+    "AWSServiceRoleForResourceExplorer",
+    "AWSServiceRoleForSSO",
+    "AWSServiceRoleForSupport",
+    "AWSServiceRoleForTrustedAdvisor"
+  ]
+}

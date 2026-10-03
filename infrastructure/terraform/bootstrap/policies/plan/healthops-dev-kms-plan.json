@@ -1,0 +1,23 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadDocumentEncryptionKey",
+      "Effect": "Allow",
+      "Action": [
+        "kms:DescribeKey",
+        "kms:GetKeyPolicy",
+        "kms:GetKeyRotationStatus",
+        "kms:ListResourceTags"
+      ],
+      "Resource": "arn:aws:kms:eu-central-1:429496640190:key/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Name": "healthops-dev-documents-429496640190-key",
+          "aws:ResourceTag/Project": "healthcare-operations-assistant",
+          "aws:ResourceTag/Environment": "dev"
+        }
+      }
+    }
+  ]
+}

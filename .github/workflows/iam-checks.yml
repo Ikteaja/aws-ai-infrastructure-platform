@@ -1,0 +1,30 @@
+name: IAM configuration checks
+
+on:
+  # Called by Terraform Plan so IAM failures block its final review gate.
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "1.16.4"
+          terraform_wrapper: false
+      - name: Check bootstrap formatting
+        run: terraform -chdir=infrastructure/terraform/bootstrap fmt -check -recursive
+      - name: Initialize bootstrap without AWS state access
+        run: terraform -chdir=infrastructure/terraform/bootstrap init -backend=false -lockfile=readonly
+      - name: Validate bootstrap and policy JSON
+        run: terraform -chdir=infrastructure/terraform/bootstrap validate
+      - name: Test import and inventory guards
+        run: python3 -m unittest discover -s tests -p test_iam_controls.py
