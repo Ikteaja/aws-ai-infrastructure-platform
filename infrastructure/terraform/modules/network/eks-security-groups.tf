@@ -85,11 +85,11 @@ resource "aws_vpc_security_group_egress_rule" "eks_workers_to_control_plane" {
   description                  = "Workers connect to the Kubernetes API."
 }
 
-#trivy:ignore:AVD-AWS-0104
 # Required lab exception: private workers need HTTPS to ECR, GitHub, and external
 # registries whose public addresses change. Workers have no public IP; the subnet
 # route sends this stateful outbound traffic through the NAT Gateway. There is no
 # inbound internet rule. Replace with an egress firewall/proxy before production.
+#trivy:ignore:AWS-0104
 resource "aws_vpc_security_group_egress_rule" "eks_workers_https" {
   security_group_id = aws_security_group.eks_workers.id
   cidr_ipv4         = "0.0.0.0/0"

@@ -125,7 +125,7 @@ permissions to that role.
 | Worker security group ingress | From worker group, all protocols | Required node-to-node and pod networking; no SSH rule |
 | Worker security group ingress | From additional EKS control-plane group, TCP 10250 and TCP 443 | Control-plane access to kubelet and HTTPS webhooks; add explicit webhook ports only when required |
 | Worker security group egress | To control-plane group, TCP 443 | Node access to the Kubernetes API |
-| Worker security group egress | To `0.0.0.0/0`, TCP 443; documented Trivy exception `AVD-AWS-0104` | Required for ECR, GitHub and external registries with changing public IPs; private subnet routing still forces outbound traffic through NAT, and no internet ingress is allowed |
+| Worker security group egress | To `0.0.0.0/0`, TCP 443; documented Trivy 0.70 exception `AWS-0104` | Required for ECR, GitHub and external registries with changing public IPs; private subnet routing still forces outbound traffic through NAT, and no internet ingress is allowed |
 | Worker security group egress | To VPC CIDR, TCP/UDP 53 | VPC and public DNS lookups |
 | Control-plane security group ingress | From worker group, TCP 443 | Worker access to the Kubernetes API |
 | Control-plane security group egress | To worker group, TCP 10250 and TCP 443 | Control-plane access to kubelet and HTTPS webhooks; add explicit webhook ports only when required |
