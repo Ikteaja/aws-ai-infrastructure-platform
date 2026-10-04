@@ -28,6 +28,31 @@ output "network_private_route_table_ids" {
   value       = module.network.private_route_table_ids
 }
 
+output "network_public_subnet_ids" {
+  description = "Development public subnet IDs indexed by subnet key."
+  value       = module.network.public_subnet_ids
+}
+
+output "network_nat_gateway_id" {
+  description = "ID of the single lab NAT gateway."
+  value       = module.network.nat_gateway_id
+}
+
+output "network_s3_gateway_endpoint_id" {
+  description = "ID of the S3 gateway endpoint."
+  value       = module.network.s3_gateway_endpoint_id
+}
+
+output "eks_control_plane_security_group_id" {
+  description = "Additional security group prepared for the future EKS control plane."
+  value       = module.network.eks_control_plane_security_group_id
+}
+
+output "eks_worker_security_group_id" {
+  description = "Security group prepared for future EKS worker nodes."
+  value       = module.network.eks_worker_security_group_id
+}
+
 output "ecr_repository_urls" {
   description = "ECR repository URLs indexed by repository name."
   value       = module.ecr.repository_urls

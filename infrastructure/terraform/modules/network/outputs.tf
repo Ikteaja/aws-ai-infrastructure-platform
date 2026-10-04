@@ -24,3 +24,32 @@ output "private_route_table_ids" {
     key => route_table.id
   }
 }
+
+output "public_subnet_ids" {
+  description = "Public subnet IDs indexed by subnet key."
+
+  value = {
+    for key, subnet in aws_subnet.public :
+    key => subnet.id
+  }
+}
+
+output "nat_gateway_id" {
+  description = "ID of the single lab NAT gateway; shared by private subnet routes."
+  value       = aws_nat_gateway.lab.id
+}
+
+output "s3_gateway_endpoint_id" {
+  description = "ID of the S3 gateway endpoint associated with private route tables."
+  value       = aws_vpc_endpoint.s3.id
+}
+
+output "eks_control_plane_security_group_id" {
+  description = "Additional control-plane security group prepared for the future EKS cluster."
+  value       = aws_security_group.eks_control_plane.id
+}
+
+output "eks_worker_security_group_id" {
+  description = "Worker security group prepared for the future EKS managed node group."
+  value       = aws_security_group.eks_workers.id
+}

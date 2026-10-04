@@ -22,26 +22,45 @@ All abbreviated policy names below have the prefix `healthops-dev-`.
 | `healthops-dev-terraform-plan-permissions` | GitHub OIDC, repository main and pull-request subjects | `terraform-plan-permissions` | Read dev state and document bucket settings; write/delete only the dev state lock |
 | Same plan role | Same trust | `kms-plan` | Read document-key configuration, restricted by tags |
 | Same plan role | Same trust | `ecr-plan` | Read the two dev repositories and tagged ECR key |
+| Same plan role | Same trust | Managed `network-plan-read` | Read VPC, routes, gateways, endpoints, security groups and Flow Logs for dev planning |
 | Same plan role | Same trust | `cost-reporting` | `ce:GetCostAndUsage` account spending report |
 | `healthops-dev-terraform-apply` | GitHub OIDC, repository main subject | `terraform-apply-permissions` | Update dev state and document bucket configuration |
 | Same apply role | Same trust | `terraform-apply` | Document bucket notifications; not a duplicate of the preceding policy |
 | Same apply role | Same trust | `kms-apply` | Create and configure tagged document encryption keys |
 | Same apply role | Same trust | `ecr-apply` | Manage the tagged ECR key and two dev repositories |
 | Same apply role | Same trust | `network-apply` | Configure dev network, Flow Logs key/log group and the specific Flow Logs role; scoped `iam:PassRole` |
+| Same apply role | Same trust | Managed `network-egress-apply` | Manage the dev NAT, Internet Gateway, S3 gateway endpoint and EKS connectivity security groups |
 | `healthops-dev-ecr-image-publisher` | GitHub OIDC, repository main subject only | `ecr-image-publisher` | Push and inspect images in only the two dev repositories |
 | `healthops-dev-vpc-flow-logs` | `vpc-flow-logs.amazonaws.com` | `vpc-flow-logs-publish` | Publish network metadata to the dedicated CloudWatch log group |
-| No attachment | None | Managed policy `network-plan-read` | Existing network/key/log/Flow Logs role reads; imported as unattached, so it currently grants nothing |
+| `healthops-dev-eks-admin` | Verified AWS IAM Identity Center SSO role ARN in `policies/eks-admin/trust.json` | No AWS permissions attached | Dedicated assumed identity for EKS Kubernetes administrator access; EKS authorization comes from the cluster access-policy association |
 
-No managed policies were attached to these three project roles at inventory time. Seven deployment inline policies and one workload inline policy existed. Exact addresses and import IDs: [iam-resource-map.json](iam-resource-map.json). Point-in-time evidence: [iam-adoption-baseline.json](iam-adoption-baseline.json), which contains IAM configuration, not credentials.
+The adoption baseline is a point-in-time record: it showed the network read
+managed policy as unattached. The current bootstrap configuration declares the
+plan-role attachment and the new apply-role managed network policy; those desired
+changes take effect only after an approved bootstrap apply. Exact adopted
+addresses and import IDs: [iam-resource-map.json](iam-resource-map.json).
+Point-in-time IAM evidence: [iam-adoption-baseline.json](iam-adoption-baseline.json);
+it contains no credentials.
 
 The ECR plan/apply policies and image-publisher role are declared in bootstrap
 Terraform. They grant no access until a reviewed bootstrap plan is applied. The
 publisher role is separate from the Terraform apply role and cannot manage KMS.
 
+The EKS administrator role is not present in AWS yet; bootstrap Terraform now
+declares it with a trust relationship restricted to the exact SSO role verified
+in account `429496640190`. The AWS-owned SSO role remains outside this
+Terraform state. That SSO role has the AWS-managed
+`AdministratorAccess` policy; IAM simulation confirmed `sts:AssumeRole` is
+allowed for the proposed EKS role ARN. We do not manage the AWS-owned SSO role
+through this Terraform state. The dedicated role intentionally has no broad AWS
+permissions: after a cluster exists, the EKS access entry associates
+`AmazonEKSClusterAdminPolicy` at cluster scope.
+
 ## Source of truth
 
 - `bootstrap/*_role.tf`: deployment identity properties.
 - `bootstrap/policies/plan/`, `bootstrap/policies/apply/` and `bootstrap/policies/publisher/`: trust and inline permission documents consumed by Terraform.
+- `bootstrap/policies/managed/`: scoped network plan-read and egress-apply managed policy documents.
 - `bootstrap/managed_policies.tf` and `bootstrap/policies/managed/`: standalone managed policy.
 - `bootstrap/github_oidc.tf`: shared GitHub provider.
 - `bootstrap/imports.tf`: retained adoption declarations for 11 existing resources.
@@ -49,9 +68,9 @@ publisher role is separate from the Terraform apply role and cannot manage KMS.
 - `modules/document-storage/` and `bootstrap/state_bucket.tf`: S3/KMS resource policies, already Terraform-managed.
 - `infrastructure/terraform/policies/README.md`: points to bootstrap-managed policy sources; do not create duplicate managed policies.
 
-The three original export documents and four older policy/trust copies were
-removed after confirming that their parsed JSON exactly matched the active
-bootstrap documents. Edit only `bootstrap/policies/` for deployment permissions.
+The ECR and network policies are maintained under `bootstrap/policies/`; update
+the policy source files and managed-policy resources together when changing
+deployment permissions.
 The adoption baseline remains a historical audit record, not a deployment source.
 
 The aliased IAM provider has no default tags, preventing state-bucket tags from silently changing imported identities. Existing tags are preserved. Roles and OIDC have Terraform deletion guards; these do not restrict AWS console actions.

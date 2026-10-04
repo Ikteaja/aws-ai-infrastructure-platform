@@ -156,6 +156,28 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
 
+      # Optional until the EKS cluster milestone. If either value is supplied,
+      # require both and pass a validated object into Terraform.
+      - name: Configure optional EKS administrator inputs
+        env:
+          EKS_ADMIN_PUBLIC_IPV4_CIDR: ${{ vars.EKS_ADMIN_PUBLIC_IPV4_CIDR }}
+          EKS_ADMIN_IAM_ROLE_ARN: ${{ vars.EKS_ADMIN_IAM_ROLE_ARN }}
+        run: |
+          if [ -z "$EKS_ADMIN_PUBLIC_IPV4_CIDR" ] && [ -z "$EKS_ADMIN_IAM_ROLE_ARN" ]; then
+            exit 0
+          fi
+
+          if [ -z "$EKS_ADMIN_PUBLIC_IPV4_CIDR" ] || [ -z "$EKS_ADMIN_IAM_ROLE_ARN" ]; then
+            echo "::error::Set both EKS_ADMIN_PUBLIC_IPV4_CIDR and EKS_ADMIN_IAM_ROLE_ARN repository variables."
+            exit 1
+          fi
+
+          administrator_json="$(jq -cn \
+            --arg cidr "$EKS_ADMIN_PUBLIC_IPV4_CIDR" \
+            --arg role "$EKS_ADMIN_IAM_ROLE_ARN" \
+            '{public_ipv4_cidr: $cidr, iam_role_arn: $role}')"
+          printf 'TF_VAR_eks_administrator=%s\n' "$administrator_json" >> "$GITHUB_ENV"
+
       # STEP 3: Verify that the AWS planning role is configured.
       # Store the role ARN as a GitHub repository variable.
       - name: Check planning role configuration

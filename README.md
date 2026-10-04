@@ -91,6 +91,8 @@ sequenceDiagram
 IAM ownership, role/policy purposes, import records and controlled change procedures
 are documented in the [IAM policy map](docs/IAM-POLICY-MAP.md).
 Bootstrap owns deployment access; environment modules own workload permissions.
+The [EKS connectivity guide](docs/eks-connectivity.md) documents private-worker
+egress and future administrator access; the cluster and workers are not yet deployed.
 
 The API and mock model communicate successfully in Docker and local
 Kubernetes. Application CI tests both services and verifies a real
@@ -101,12 +103,13 @@ and saves a local JSON snapshot between runs. All 15 ingestion tests
 passed locally and in GitHub Actions. Retrieval and real AI answers
 are not implemented yet.
 
-AWS Terraform state storage and the encrypted document bucket have been
-created. The networking module passes local Terraform validation.
-Network deployment and the revised pull-request planning workflow are
-still being verified.
+AWS Terraform state storage, the encrypted document bucket and base VPC/private
+subnets have been created according to deployment records. NAT-based worker
+connectivity and EKS administrator-access preparation are configured in Terraform
+but require the existing reviewed plan/apply workflow; no EKS cluster or worker
+connectivity test exists yet.
 
-**Progress: 20 milestones completed, 5 in progress, 8 planned.**
+**Progress: 21 milestones completed, 6 in progress, 7 planned.**
 
 | # | Milestone | Status | Result |
 |---|---|---|---|
@@ -131,7 +134,7 @@ still being verified.
 | 19 | Bootstrap remote Terraform state | ✅ Done | Dedicated S3 state bucket created with versioning, encryption and public-access blocking; dev uses a separate state key and locking |
 | 20 | Configure AWS access and manual Terraform apply | ✅ Done | Separate planning and apply roles use temporary GitHub credentials; a manually requested apply completed successfully |
 | 21 | Create encrypted AWS document storage | ✅ Done | Document bucket deployed with public-access blocking, versioning and customer-managed KMS encryption |
-| 22 | Build and deploy the AWS network module | 🟡 In progress | VPC, two private subnets, route tables and default security-group restrictions configured; local validation passed; deployment verification pending |
+| 22 | Build and deploy the AWS network module | 🟡 In progress | VPC, two private subnets, route tables, Flow Logs and restricted default security group recorded as deployed; NAT/public subnet changes still require a reviewed apply |
 | 23 | Complete pre-merge Terraform planning | 🟡 In progress | Workflow configured for validation, security scans and PR planning; latest end-to-end run still needs confirmation |
 | 24 | Integrate recorded AWS spending reports | 🟡 In progress | Local Cost Explorer query succeeded; pipeline report added and Infracost removed; CI verification pending |
 | 25 | Maintain project documentation | 🟡 In progress | README, ingestion guide, networking mappings and pipeline instructions updated as implementation progresses |
@@ -143,6 +146,7 @@ still being verified.
 | 31 | Add temporary NVIDIA GPU inference | ⬜ Planned | Deploy GPU-backed model serving, test performance and remove GPU resources after testing |
 | 32 | Validate operations, cost controls and teardown | ⬜ Planned | Add metrics and alerts, test recovery, review spending and verify removal of chargeable lab resources |
 | 33 | Publish application images to private ECR | 🟡 In progress | Configure a main-only GitHub OIDC publisher role, push tested commit-tagged images and record image digests |
+| 34 | Configure private worker connectivity and administrator access | 🟡 In progress | NAT-based egress, S3 endpoint and EKS security groups configured; validated admin inputs and access-entry module prepared; EKS deployment remains separate |
 
 ### 6. Component responsibilities
 

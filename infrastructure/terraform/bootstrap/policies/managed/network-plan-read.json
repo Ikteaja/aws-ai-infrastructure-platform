@@ -12,7 +12,12 @@
         "ec2:DescribeSecurityGroups",
         "ec2:DescribeSecurityGroupRules",
         "ec2:DescribeFlowLogs",
-        "ec2:DescribeTags"
+        "ec2:DescribeAddresses",
+        "ec2:DescribeInternetGateways",
+        "ec2:DescribeNatGateways",
+        "ec2:DescribeTags",
+        "ec2:DescribeVpcEndpointServices",
+        "ec2:DescribeVpcEndpoints"
       ],
       "Resource": "*",
       "Condition": {
