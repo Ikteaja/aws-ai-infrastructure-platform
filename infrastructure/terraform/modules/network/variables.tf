@@ -49,6 +49,35 @@ variable "private_subnets" {
   }
 }
 
+# Public subnets host internet-facing infrastructure such as the single lab NAT
+# gateway. Worker nodes remain in private_subnets and receive no public IPs.
+variable "public_subnets" {
+  description = "Public IPv4 subnet ranges and Availability Zones."
+
+  type = map(object({
+    cidr_block        = string
+    availability_zone = string
+  }))
+
+  validation {
+    condition = length(distinct([
+      for subnet in values(var.public_subnets) :
+      subnet.availability_zone
+    ])) >= 2
+
+    error_message = "Provide public subnets in at least two different Availability Zones."
+  }
+
+  validation {
+    condition = alltrue([
+      for subnet in values(var.public_subnets) :
+      can(cidrnetmask(subnet.cidr_block))
+    ])
+
+    error_message = "Every public subnet must have a valid IPv4 CIDR."
+  }
+}
+
 # Common labels identify ownership, environment and purpose.
 variable "tags" {
   description = "Common tags applied to network resources."

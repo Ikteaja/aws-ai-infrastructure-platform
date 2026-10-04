@@ -1,0 +1,36 @@
+# These fragments are for the future EKS cluster root. This example does not
+# create a cluster and is not automatically loaded by Terraform.
+
+# Add these settings to the future aws_eks_cluster resource's vpc_config block.
+vpc_config {
+  subnet_ids = values(module.network.private_subnet_ids)
+
+  endpoint_private_access = true
+  endpoint_public_access  = true
+  public_access_cidrs     = [var.eks_administrator.public_ipv4_cidr]
+  access_config {
+    authentication_mode = "API_AND_CONFIG_MAP"
+  }
+
+  # The additional group preserves explicit node/control-plane communications.
+  security_group_ids = [
+    module.network.eks_control_plane_security_group_id
+  ]
+}
+
+# Add this module call after defining aws_eks_cluster.this.
+module "eks_admin_access" {
+  source = "../../modules/eks-admin-access"
+
+  cluster_name                = aws_eks_cluster.this.name
+  aws_account_id              = var.aws_account_id
+  administrator_iam_role_arn  = var.eks_administrator.iam_role_arn
+}
+
+# For a future managed node group launch template, attach the worker group.
+# vpc_security_group_ids = [
+#   module.network.eks_worker_security_group_id
+# ]
+#
+# Attach AWS managed policy AmazonEC2ContainerRegistryPullOnly to the dedicated
+# node IAM role. Never use the image-publisher or Terraform execution role.

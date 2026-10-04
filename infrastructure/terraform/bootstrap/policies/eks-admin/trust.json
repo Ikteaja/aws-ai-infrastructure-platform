@@ -1,0 +1,13 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowVerifiedHealthOpsAdministrator",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::429496640190:role/aws-reserved/sso.amazonaws.com/eu-central-1/AWSReservedSSO_AdministratorAccess_4af4e9b42a20d275"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}

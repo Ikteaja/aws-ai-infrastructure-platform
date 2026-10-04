@@ -39,6 +39,19 @@ module "network" {
     }
   }
 
+  # Only the NAT gateway uses a public subnet; worker nodes remain private.
+  public_subnets = {
+    a = {
+      cidr_block        = "10.40.0.0/24"
+      availability_zone = "eu-central-1a"
+    }
+
+    b = {
+      cidr_block        = "10.40.1.0/24"
+      availability_zone = "eu-central-1b"
+    }
+  }
+
   # Identify the environment, owner and resource purpose.
   tags = {
     Project     = "healthcare-operations-assistant"

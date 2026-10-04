@@ -7,11 +7,16 @@ This directory contains reusable modules and separate administrative and workloa
 | Root | Owns | S3 state key |
 |---|---|---|
 | `bootstrap/` | State bucket, GitHub OIDC, deployment roles and policies | `bootstrap/terraform.tfstate` |
-| `environments/dev/` | Document storage, ECR repositories and KMS, networking and Flow Logs workload identity | `dev/terraform.tfstate` |
+| `environments/dev/` | Document storage, ECR repositories and KMS, VPC/NAT/S3 connectivity and Flow Logs | `dev/terraform.tfstate` |
 
-Deployment permissions remain in bootstrap after initial setup. Workload identities and resource policies stay in their environment modules. The dev root provisions two ECR repositories and their shared KMS key. The lab is for synthetic or approved documents only.
+Deployment permissions remain in bootstrap after initial setup. Workload identities and resource policies stay in their environment modules. The dev root provisions two ECR repositories and their shared KMS key. NAT connectivity and EKS security groups are configured in Terraform but await the reviewed deployment workflow; the EKS cluster is not created. The lab is for synthetic or approved documents only.
 
 See the [IAM policy map](../../docs/IAM-POLICY-MAP.md) for every role and policy, import records, monitoring and the controlled change procedure. Files in `policies/` are historical references or future proposals; active deployment policies are under `bootstrap/policies/`.
+
+See the [EKS connectivity guide](../../docs/eks-connectivity.md) for the
+private-worker NAT design, prepared administrator access, verification and
+troubleshooting. That guide distinguishes Terraform configuration from deployed
+and tested connectivity.
 
 ### Prerequisites
 
