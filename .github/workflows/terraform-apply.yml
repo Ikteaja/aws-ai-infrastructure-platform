@@ -246,9 +246,17 @@ jobs:
           set -e
           cat "$RUNNER_TEMP/refresh-check.txt"
 
-          if [ "$refresh_status" -eq 0 ]; then
+          if [ "$refresh_status" -eq 0 ] || {
+            [ "$refresh_status" -eq 2 ] &&
+            grep -Fq "No changes. Your infrastructure still matches the configuration." \
+              "$RUNNER_TEMP/refresh-check.txt"
+          }; then
             echo "Refresh-only check found no differences between Terraform state and AWS." \
               >> "$GITHUB_STEP_SUMMARY"
+            if [ "$refresh_status" -eq 2 ]; then
+              echo "Terraform returned detailed exit code 2, but its output explicitly reported no changes." \
+                >> "$GITHUB_STEP_SUMMARY"
+            fi
           elif [ "$refresh_status" -eq 2 ]; then
             echo "::error::Refresh-only check found differences between Terraform state and AWS."
             echo "Refresh-only check found differences. Review the job log." \
