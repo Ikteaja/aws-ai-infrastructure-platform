@@ -1,6 +1,7 @@
 # These additional security groups are prepared for the future EKS cluster and
 # managed node group. The cluster's AWS-managed security group remains in use.
 resource "aws_security_group" "eks_control_plane" {
+  # checkov:skip=CKV2_AWS_5:EKS is not created in this milestone; attach this prepared group when the future cluster is provisioned.
   name        = "${var.name}-eks-control-plane"
   description = "Additional EKS control-plane security group for ${var.name}."
   vpc_id      = aws_vpc.this.id
@@ -12,6 +13,7 @@ resource "aws_security_group" "eks_control_plane" {
 }
 
 resource "aws_security_group" "eks_workers" {
+  # checkov:skip=CKV2_AWS_5:EKS workers are not created in this milestone; attach this prepared group to the future node group.
   name        = "${var.name}-eks-workers"
   description = "EKS worker security group for ${var.name}; no SSH ingress."
   vpc_id      = aws_vpc.this.id
@@ -35,9 +37,9 @@ resource "aws_vpc_security_group_egress_rule" "eks_control_plane_to_workers" {
   security_group_id            = aws_security_group.eks_control_plane.id
   referenced_security_group_id = aws_security_group.eks_workers.id
   ip_protocol                  = "tcp"
-  from_port                    = 1025
-  to_port                      = 65535
-  description                  = "Control plane reaches kubelets and workload webhook ports."
+  from_port                    = 10250
+  to_port                      = 10250
+  description                  = "Control plane reaches the worker kubelet."
 }
 
 resource "aws_vpc_security_group_egress_rule" "eks_control_plane_https_to_workers" {
@@ -53,9 +55,9 @@ resource "aws_vpc_security_group_ingress_rule" "eks_workers_from_control_plane" 
   security_group_id            = aws_security_group.eks_workers.id
   referenced_security_group_id = aws_security_group.eks_control_plane.id
   ip_protocol                  = "tcp"
-  from_port                    = 1025
-  to_port                      = 65535
-  description                  = "Control plane reaches kubelets and workload webhook ports."
+  from_port                    = 10250
+  to_port                      = 10250
+  description                  = "Control plane reaches the worker kubelet."
 }
 
 resource "aws_vpc_security_group_ingress_rule" "eks_workers_https_from_control_plane" {
@@ -83,6 +85,11 @@ resource "aws_vpc_security_group_egress_rule" "eks_workers_to_control_plane" {
   description                  = "Workers connect to the Kubernetes API."
 }
 
+#trivy:ignore:AVD-AWS-0104
+# Required lab exception: private workers need HTTPS to ECR, GitHub, and external
+# registries whose public addresses change. Workers have no public IP; the subnet
+# route sends this stateful outbound traffic through the NAT Gateway. There is no
+# inbound internet rule. Replace with an egress firewall/proxy before production.
 resource "aws_vpc_security_group_egress_rule" "eks_workers_https" {
   security_group_id = aws_security_group.eks_workers.id
   cidr_ipv4         = "0.0.0.0/0"

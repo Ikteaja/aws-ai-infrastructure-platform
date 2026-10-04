@@ -123,12 +123,12 @@ permissions to that role.
 | S3 managed prefix-list route | Private route tables → S3 gateway endpoint | Sends S3/ECR image-layer traffic directly to S3 rather than via NAT |
 | VPC DNS settings | VPC resolver | DNS support and DNS hostnames are already enabled |
 | Worker security group ingress | From worker group, all protocols | Required node-to-node and pod networking; no SSH rule |
-| Worker security group ingress | From additional EKS control-plane group, TCP 1025–65535 and TCP 443 | Control-plane access to kubelet and workload webhook ports |
+| Worker security group ingress | From additional EKS control-plane group, TCP 10250 and TCP 443 | Control-plane access to kubelet and HTTPS webhooks; add explicit webhook ports only when required |
 | Worker security group egress | To control-plane group, TCP 443 | Node access to the Kubernetes API |
-| Worker security group egress | To `0.0.0.0/0`, TCP 443 | ECR, AWS APIs, GitHub and external registries, routed through NAT |
+| Worker security group egress | To `0.0.0.0/0`, TCP 443; documented Trivy exception `AVD-AWS-0104` | Required for ECR, GitHub and external registries with changing public IPs; private subnet routing still forces outbound traffic through NAT, and no internet ingress is allowed |
 | Worker security group egress | To VPC CIDR, TCP/UDP 53 | VPC and public DNS lookups |
 | Control-plane security group ingress | From worker group, TCP 443 | Worker access to the Kubernetes API |
-| Control-plane security group egress | To worker group, TCP 1025–65535 and TCP 443 | Control-plane access to kubelets and workload webhooks |
+| Control-plane security group egress | To worker group, TCP 10250 and TCP 443 | Control-plane access to kubelet and HTTPS webhooks; add explicit webhook ports only when required |
 | Worker IAM role (future) | `AmazonEC2ContainerRegistryPullOnly` | Pull authorization for private ECR; separate from Terraform and image publishing |
 | Administrator IAM role (future) | EKS access entry plus `AmazonEKSClusterAdminPolicy` | Kubernetes authorization after AWS IAM authentication |
 | Public Kubernetes endpoint (future) | Exactly the supplied admin IPv4 `/32` | Restricts internet-side `kubectl`; never use `0.0.0.0/0` |
@@ -137,7 +137,16 @@ permissions to that role.
 The default VPC security group remains restricted and is not reused for workers.
 The prepared EKS security groups are additional groups; retain the
 EKS-managed cluster security group when the future cluster and node group are
-configured.
+configured. Checkov flags these unattached groups because no cluster or nodes
+exist yet; the narrow inline exceptions apply only until the EKS milestone
+attaches them. Remove those exceptions after association. The control-plane
+rules use TCP 10250 for kubelet rather than a broad range that also includes
+remote-desktop ports. Add any workload webhook port explicitly when that
+workload is introduced. Trivy flags unrestricted HTTPS egress as critical; the
+inline exception is limited to this worker rule and documents the lab requirement.
+Before production, replace it with a controlled egress firewall or proxy and
+explicit destination policy, then remove the exception. NAT provides address
+translation, not destination filtering.
 
 ## Terraform inputs and future EKS integration
 
