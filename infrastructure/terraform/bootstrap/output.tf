@@ -8,3 +8,8 @@ output "state_bucket_region" {
   description = "AWS region containing the state bucket."
   value       = "eu-central-1"
 }
+
+output "ecr_image_publisher_role_arn" {
+  description = "OIDC role ARN for publishing application images to the dev ECR repositories."
+  value       = aws_iam_role.ecr_image_publisher.arn
+}

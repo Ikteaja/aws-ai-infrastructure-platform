@@ -12,6 +12,13 @@ resource "aws_iam_role_policy" "terraform_plan_kms" {
   policy   = jsonencode(jsondecode(file("${path.module}/policies/plan/healthops-dev-kms-plan.json")))
 }
 
+resource "aws_iam_role_policy" "terraform_plan_ecr" {
+  provider = aws.iam
+  name     = "healthops-dev-ecr-plan"
+  role     = aws_iam_role.terraform_plan.name
+  policy   = jsonencode(jsondecode(file("${path.module}/policies/plan/ecr-plan.json")))
+}
+
 resource "aws_iam_role_policy" "terraform_plan_permissions" {
   provider = aws.iam
   name     = "healthops-dev-terraform-plan-permissions"

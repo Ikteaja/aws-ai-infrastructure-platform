@@ -55,9 +55,9 @@ flowchart TD
 | Dev Terraform root | Integration snippets | Calls `module.ecr`; supplies naming and tags |
 | AWS provider | Already in dev root | Region, credentials and account guard |
 | ECR module | Yes | Image storage, encryption, scan-on-push and lifecycle |
-| Terraform plan role | Supplementary policy supplied | Reads repository/key configuration |
-| Terraform apply role | Supplementary policy supplied | Manages the module's AWS resources |
-| Image publisher | Next milestone | Pushes tested images using separate scoped permissions |
+| Terraform plan role | Bootstrap-managed inline policy | Reads repository/key configuration |
+| Terraform apply role | Bootstrap-managed inline policy | Manages the module's AWS resources |
+| Image publisher | Bootstrap-managed OIDC role | Pushes tested images using separate scoped permissions |
 | EKS pull identity | Later | Authorizes nodes to download the images |
 | Network module | Existing, independent | Subnets and routing; not passed to ECR |
 
@@ -81,7 +81,7 @@ plus other endpoints needed by the cluster. Interface endpoints and NAT can add 
 | `outputs.tf` | Returns repository URLs, ARNs and the encryption key ARN |
 | `README.md` | Explains setup, use, costs and cleanup |
 
-The bundle also includes `integration/*.tf.example` and two supplementary IAM policies.
+The bundle also includes `integration/*.tf.example` and scoped IAM policy documents.
 The `.example` files are instructions to append configuration, not complete root modules.
 
 ## Security and cost choices
@@ -133,7 +133,7 @@ git switch -c feature/dev-ecr
 Extract `ecr-module.zip` into a temporary folder and open its `ecr-module` folder.
 Copy its `infrastructure` contents into
 this repository, preserving the existing Terraform files. It adds the module and
-`ecr-plan.json` / `ecr-apply.json`; it does not replace network or storage code.
+bootstrap-managed ECR permissions; it does not replace network or storage code.
 
 1. Append `integration/dev-main.tf.example` to `infrastructure/terraform/environments/dev/main.tf`.
 2. Append `integration/dev-outputs.tf.example` to that directory's `outputs.tf`.
@@ -147,52 +147,39 @@ The call uses `source = "../../modules/ecr"`. The repositories become:
 429496640190.dkr.ecr.eu-central-1.amazonaws.com/healthops-dev/mock-model
 ```
 
-## Step 3 — Add scoped permissions to the pipeline roles
+## Step 3 — Apply bootstrap IAM permissions
 
-The existing document and network policies do not authorize these new resources.
-Use the admin SSO profile to add the supplied **customer-managed** policies. These
-supplement existing policies; they must not replace state/backend or other module permissions.
-Managed policies avoid expanding the already large inline-policy total on the role.
-Review their JSON before running these commands.
+The bootstrap root manages the scoped Terraform plan/apply policies and a separate
+image-publisher role. The publisher trust is restricted to this repository's
+`main` branch. Apply the reviewed bootstrap change with administrator credentials;
+do not create or attach duplicate managed policies.
 
 ```powershell
+Set-Location C:\Users\iktea\.vscode\aws-ai-infrastructure-platform
 aws sso login --profile ai-lab-admin
-aws sts get-caller-identity --profile ai-lab-admin
-
-# Create each policy once. These policies are specific to this account and dev naming.
-aws iam create-policy --policy-name healthops-dev-ecr-plan `
-  --policy-document file://infrastructure/terraform/policies/ecr-plan.json `
-  --tags Key=Project,Value=healthcare-operations-assistant Key=Environment,Value=dev Key=ManagedBy,Value=ManualBootstrap Key=Owner,Value=Ikteaja `
-  --profile ai-lab-admin --no-cli-pager
-
-aws iam create-policy --policy-name healthops-dev-ecr-apply `
-  --policy-document file://infrastructure/terraform/policies/ecr-apply.json `
-  --tags Key=Project,Value=healthcare-operations-assistant Key=Environment,Value=dev Key=ManagedBy,Value=ManualBootstrap Key=Owner,Value=Ikteaja `
-  --profile ai-lab-admin --no-cli-pager
-
-# Attach to the existing roles; do not change their GitHub OIDC trust policies.
-aws iam attach-role-policy --role-name healthops-dev-terraform-plan-permissions `
-  --policy-arn arn:aws:iam::429496640190:policy/healthops-dev-ecr-plan `
-  --profile ai-lab-admin
-aws iam attach-role-policy --role-name healthops-dev-terraform-apply `
-  --policy-arn arn:aws:iam::429496640190:policy/healthops-dev-ecr-apply `
-  --profile ai-lab-admin
+$env:AWS_PROFILE = "ai-lab-admin"
+aws sts get-caller-identity
+terraform -chdir=infrastructure/terraform/bootstrap init -lockfile=readonly
+terraform -chdir=infrastructure/terraform/bootstrap validate
+terraform -chdir=infrastructure/terraform/bootstrap plan
+# Apply only after reviewing the bootstrap plan.
+terraform -chdir=infrastructure/terraform/bootstrap apply
 ```
 
-If a policy already exists, inspect it and update its default version using
-`aws iam create-policy-version --policy-arn <arn> --policy-document file://<file> --set-as-default`.
-AWS allows up to five versions; review and remove an obsolete nondefault version if necessary.
+After applying bootstrap, read and keep the publisher role ARN:
 
-The policy limits ECR changes to the two repository ARNs. KMS creation requires the
-expected request tags; existing-key management requires matching resource tags.
-The key ARN wildcard is necessary before the new key ID is known. `kms:CreateGrant`
-is limited to AWS-resource grants. Key administration is privileged and belongs
-only to the trusted apply role, not the application or image-publishing role.
-After creation, you can further restrict the key resource to the actual key ARN.
+```powershell
+$publisherRoleArn = terraform -chdir=infrastructure/terraform/bootstrap output -raw ecr_image_publisher_role_arn
+if ($LASTEXITCODE -ne 0) { throw "Could not read the publisher role ARN from bootstrap state." }
+```
 
-The planning role receives no push, repository-write or key-administration permissions.
-The apply policy includes resource deletion permissions for a future reviewed teardown;
-your current plan workflow still rejects deletion/replacement plans.
+Wait to configure the GitHub variable until the dev apply has created and verified
+the repositories (Step 7 below). This keeps the first application CI merge from
+attempting to push before ECR exists.
+
+Do not store AWS access keys. The publisher policy allows authorization-token
+retrieval and push/digest-read actions only for the two dev repositories; it cannot
+administer ECR repositories or KMS keys.
 
 ## Step 4 — Initialize, validate and scan locally
 
@@ -230,10 +217,11 @@ terraform -chdir=infrastructure/terraform/environments/dev plan `
   -var="document_bucket_name=healthops-dev-documents-429496640190" `
   -lock-timeout=5m
 
-# Stage only the new module, policies and the edited dev files.
+# Stage the module, bootstrap permissions, publishing workflow and dev integration.
 git add infrastructure/terraform/modules/ecr `
-  infrastructure/terraform/policies/ecr-plan.json `
-  infrastructure/terraform/policies/ecr-apply.json `
+  infrastructure/terraform/bootstrap `
+  .github/workflows/ai-app-ci.yml `
+  infrastructure/terraform/policies/README.md `
   infrastructure/terraform/environments/dev/main.tf `
   infrastructure/terraform/environments/dev/outputs.tf
 git diff --cached --stat
@@ -275,22 +263,42 @@ Verify both repositories are `IMMUTABLE`, encryption is `KMS`, the lifecycle pol
 is present, and the effective registry scanning setup matches the intended basic scan.
 A subsequent Terraform plan should show no changes.
 
-## Next milestone — Build, scan and publish images
+After successful verification, configure the non-secret GitHub repository variable:
 
-Do this after infrastructure verification. Extend the application CI with a separate
-publisher role authenticated through GitHub OIDC, restricted to trusted main runs.
-Grant `ecr:GetAuthorizationToken` on `*`, then the upload actions only on these
-repositories (`BatchCheckLayerAvailability`, `InitiateLayerUpload`, `UploadLayerPart`,
-`CompleteLayerUpload`, `PutImage`). Add scoped read actions only if the job uses them.
-Do not use the Terraform apply role to push images.
+```powershell
+gh variable set ECR_PUBLISHER_ROLE_ARN --body $publisherRoleArn
+```
 
-Build from the repository root using `app/Dockerfile` and `model_service/Dockerfile`.
-Use the full Git commit SHA as the release tag. Publish only after tests and Trivy
-pass. On reruns, do not overwrite an immutable tag: reuse an already verified release
-or use a distinct build identifier. Capture the digest and deploy by digest later.
+Alternatively, add the value in GitHub **Settings → Secrets and variables
+→ Actions → Variables**.
 
-ECR scan-on-push reports vulnerabilities asynchronously; it does not block an upload
-or prove that the image is safe. Keep application tests and security gates in CI.
+## Step 8 — Publish and verify images
+
+Application CI runs tests, builds from both Dockerfiles, blocks fixable HIGH/CRITICAL
+Trivy findings, and exercises the two containers together. Once the publisher role,
+repository variable and ECR repositories are ready, run Application CI manually on
+`main` for the first publication. The dependent publishing job loads the exact tested
+images, assumes the dedicated role through GitHub OIDC, verifies both repositories,
+and pushes images tagged with the full commit SHA. Later pushes to `main` publish
+automatically. Pull-request runs never publish. If that immutable tag already exists
+on a workflow rerun, the workflow reuses it and reports its digest.
+
+If ECR is not ready when the workflow first reaches `main`, it reports that image
+publishing was deferred. Set the variable only after infrastructure verification,
+then select **Actions → Application CI → Run workflow → main**. Inspect the run
+summary for both immutable image digests. For a local AWS-side check:
+
+```powershell
+aws sso login --profile ai-lab-admin
+$env:AWS_PROFILE = "ai-lab-admin"
+aws ecr describe-images --repository-name healthops-dev/api --region eu-central-1 `
+  --query "imageDetails[].{Tags:imageTags,Digest:imageDigest}" --output table
+aws ecr describe-images --repository-name healthops-dev/mock-model --region eu-central-1 `
+  --query "imageDetails[].{Tags:imageTags,Digest:imageDigest}" --output table
+```
+
+Use the reported `repository@sha256:...` digest for later deployment. ECR scan-on-push
+is asynchronous and complements, rather than replaces, the blocking Trivy checks.
 
 ## Cleanup and troubleshooting
 
@@ -313,8 +321,9 @@ a 30-day recovery window here; do not disable or delete a key still used by ECR.
 ## Completion checklist
 
 - [ ] Module and root integration committed.
-- [ ] Supplementary plan/apply policies reviewed and attached.
+- [ ] Bootstrap plan/apply and publisher IAM changes reviewed and applied.
 - [ ] Local validation and security scans pass.
 - [ ] PR and main plans reviewed; no unexpected changes.
 - [ ] Manual apply completed and both repositories verified.
-- [ ] Image publishing remains a separate next milestone.
+- [ ] `ECR_PUBLISHER_ROLE_ARN` repository variable is configured.
+- [ ] Successful main-branch CI published both images and recorded their digests.

@@ -5,6 +5,13 @@ resource "aws_iam_role_policy" "kms_apply" {
   policy   = jsonencode(jsondecode(file("${path.module}/policies/apply/healthops-dev-kms-apply.json")))
 }
 
+resource "aws_iam_role_policy" "ecr_apply" {
+  provider = aws.iam
+  name     = "healthops-dev-ecr-apply"
+  role     = aws_iam_role.terraform_apply.name
+  policy   = jsonencode(jsondecode(file("${path.module}/policies/apply/ecr-apply.json")))
+}
+
 resource "aws_iam_role_policy" "network_apply" {
   provider = aws.iam
   name     = "healthops-dev-network-apply"
