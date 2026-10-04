@@ -106,7 +106,7 @@ created. The networking module passes local Terraform validation.
 Network deployment and the revised pull-request planning workflow are
 still being verified.
 
-**Progress: 20 milestones completed, 4 in progress, 8 planned.**
+**Progress: 20 milestones completed, 5 in progress, 8 planned.**
 
 | # | Milestone | Status | Result |
 |---|---|---|---|
@@ -142,6 +142,7 @@ still being verified.
 | 30 | Deploy the platform to Amazon EKS | ⬜ Planned | Run the API and supporting services on CPU worker nodes |
 | 31 | Add temporary NVIDIA GPU inference | ⬜ Planned | Deploy GPU-backed model serving, test performance and remove GPU resources after testing |
 | 32 | Validate operations, cost controls and teardown | ⬜ Planned | Add metrics and alerts, test recovery, review spending and verify removal of chargeable lab resources |
+| 33 | Publish application images to private ECR | 🟡 In progress | Configure a main-only GitHub OIDC publisher role, push tested commit-tagged images and record image digests |
 
 ### 6. Component responsibilities
 
@@ -258,7 +259,7 @@ AWS environment   -> AWS Secrets Manager
 - Application tests run in memory; API tests simulate outgoing model requests.
 - The separate container integration test uses real HTTP communication.
 - Kubernetes integration has been verified manually; automated Kubernetes testing is planned.
-- AWS and GPU deployment remain planned.
+- AWS application deployment and GPU deployment remain planned.
 
 ### Configuration issue resolved
 

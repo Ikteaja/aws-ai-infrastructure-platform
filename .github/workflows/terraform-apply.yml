@@ -209,3 +209,54 @@ jobs:
             echo "- Requested by: $GITHUB_ACTOR"
             echo "- State location: dev/terraform.tfstate"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # STEP 9: Verify live resources against state and publish their inventory.
+      - name: Verify deployed resources and write inventory
+        working-directory: infrastructure/terraform/environments/dev
+        run: |
+          {
+            echo ""
+            echo "## Deployed resource inventory"
+            echo ""
+            echo "Terraform-managed resources in state:"
+            echo ""
+            echo '```text'
+            terraform state list
+            echo '```'
+            echo ""
+            echo "### Key resource identifiers"
+            echo ""
+            echo "| Output | Value |"
+            echo "|---|---|"
+            echo "| Document bucket | $(terraform output -raw document_bucket_name) |"
+            echo "| Document bucket ARN | $(terraform output -raw document_bucket_arn) |"
+            echo "| VPC ID | $(terraform output -raw network_vpc_id) |"
+            echo "| ECR KMS key ARN | $(terraform output -raw ecr_kms_key_arn) |"
+            terraform output -json ecr_repository_urls |
+              jq -r 'to_entries[] | "| ECR repository (\(.key)) | \(.value) |"'
+            echo ""
+            echo "### Live AWS refresh check"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          set +e
+          terraform plan -refresh-only -detailed-exitcode -no-color \
+            -lock-timeout=5m > "$RUNNER_TEMP/refresh-check.txt" 2>&1
+          refresh_status=$?
+          set -e
+          cat "$RUNNER_TEMP/refresh-check.txt"
+
+          if [ "$refresh_status" -eq 0 ]; then
+            echo "Refresh-only check found no differences between Terraform state and AWS." \
+              >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$refresh_status" -eq 2 ]; then
+            echo "::error::Refresh-only check found differences between Terraform state and AWS."
+            echo "Refresh-only check found differences. Review the job log." \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          else
+            echo "::error::Refresh-only verification failed with exit code $refresh_status."
+            echo "Refresh-only verification failed; review the job log." \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit "$refresh_status"
+          fi

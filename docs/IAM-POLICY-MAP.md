@@ -7,7 +7,7 @@ Account: `429496640190`. Region: `eu-central-1`. Inventory captured on 2026-10-0
 | Layer | Terraform root / state | Owns | Operator |
 |---|---|---|---|
 | Bootstrap | `infrastructure/terraform/bootstrap` / `bootstrap/terraform.tfstate` | State bucket, GitHub OIDC, deployment roles and their permissions, standalone network-read policy | Authorized administrator with temporary SSO credentials |
-| After bootstrap | `infrastructure/terraform/environments/dev` / `dev/terraform.tfstate` | Document storage and KMS resource policies; network, Flow Logs role, publishing policy and log encryption | Existing GitHub plan and manually approved apply workflows |
+| After bootstrap | `infrastructure/terraform/environments/dev` / `dev/terraform.tfstate` | Document storage, ECR repositories and keys; network, Flow Logs role, publishing policy and log encryption | Existing GitHub plan and manually approved apply workflows |
 | Future workloads | Environment modules, when implemented | Dedicated ingestion, API, EKS and model identities | Reviewed environment deployment |
 | AWS-owned | Outside these Terraform states | Identity Center administrator and AWS service-linked roles | Identity Center / relevant AWS service |
 
@@ -21,26 +21,33 @@ All abbreviated policy names below have the prefix `healthops-dev-`.
 |---|---|---|---|
 | `healthops-dev-terraform-plan-permissions` | GitHub OIDC, repository main and pull-request subjects | `terraform-plan-permissions` | Read dev state and document bucket settings; write/delete only the dev state lock |
 | Same plan role | Same trust | `kms-plan` | Read document-key configuration, restricted by tags |
+| Same plan role | Same trust | `ecr-plan` | Read the two dev repositories and tagged ECR key |
 | Same plan role | Same trust | `cost-reporting` | `ce:GetCostAndUsage` account spending report |
 | `healthops-dev-terraform-apply` | GitHub OIDC, repository main subject | `terraform-apply-permissions` | Update dev state and document bucket configuration |
 | Same apply role | Same trust | `terraform-apply` | Document bucket notifications; not a duplicate of the preceding policy |
 | Same apply role | Same trust | `kms-apply` | Create and configure tagged document encryption keys |
+| Same apply role | Same trust | `ecr-apply` | Manage the tagged ECR key and two dev repositories |
 | Same apply role | Same trust | `network-apply` | Configure dev network, Flow Logs key/log group and the specific Flow Logs role; scoped `iam:PassRole` |
+| `healthops-dev-ecr-image-publisher` | GitHub OIDC, repository main subject only | `ecr-image-publisher` | Push and inspect images in only the two dev repositories |
 | `healthops-dev-vpc-flow-logs` | `vpc-flow-logs.amazonaws.com` | `vpc-flow-logs-publish` | Publish network metadata to the dedicated CloudWatch log group |
 | No attachment | None | Managed policy `network-plan-read` | Existing network/key/log/Flow Logs role reads; imported as unattached, so it currently grants nothing |
 
 No managed policies were attached to these three project roles at inventory time. Seven deployment inline policies and one workload inline policy existed. Exact addresses and import IDs: [iam-resource-map.json](iam-resource-map.json). Point-in-time evidence: [iam-adoption-baseline.json](iam-adoption-baseline.json), which contains IAM configuration, not credentials.
 
+The ECR plan/apply policies and image-publisher role are declared in bootstrap
+Terraform. They grant no access until a reviewed bootstrap plan is applied. The
+publisher role is separate from the Terraform apply role and cannot manage KMS.
+
 ## Source of truth
 
 - `bootstrap/*_role.tf`: deployment identity properties.
-- `bootstrap/policies/plan/` and `bootstrap/policies/apply/`: live trust and inline permission documents consumed by Terraform.
+- `bootstrap/policies/plan/`, `bootstrap/policies/apply/` and `bootstrap/policies/publisher/`: trust and inline permission documents consumed by Terraform.
 - `bootstrap/managed_policies.tf` and `bootstrap/policies/managed/`: standalone managed policy.
 - `bootstrap/github_oidc.tf`: shared GitHub provider.
 - `bootstrap/imports.tf`: retained adoption declarations for 11 existing resources.
 - `modules/network/flow-logs.tf`: workload role, publishing policy and KMS resource policy, already in dev state.
 - `modules/document-storage/` and `bootstrap/state_bucket.tf`: S3/KMS resource policies, already Terraform-managed.
-- `infrastructure/terraform/policies/`: future ECR proposals, **not deployed automatically**.
+- `infrastructure/terraform/policies/README.md`: points to bootstrap-managed policy sources; do not create duplicate managed policies.
 
 The three original export documents and four older policy/trust copies were
 removed after confirming that their parsed JSON exactly matched the active

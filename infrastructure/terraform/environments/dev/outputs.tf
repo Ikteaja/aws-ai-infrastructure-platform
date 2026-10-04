@@ -27,3 +27,13 @@ output "network_private_route_table_ids" {
   description = "Development private route-table IDs by subnet key."
   value       = module.network.private_route_table_ids
 }
+
+output "ecr_repository_urls" {
+  description = "ECR repository URLs indexed by repository name."
+  value       = module.ecr.repository_urls
+}
+
+output "ecr_kms_key_arn" {
+  description = "ARN of the customer-managed ECR encryption key."
+  value       = module.ecr.kms_key_arn
+}

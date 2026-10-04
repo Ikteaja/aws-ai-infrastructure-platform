@@ -12,6 +12,8 @@ on:
     branches:
       - main
 
+  workflow_dispatch:
+
 # The workflow only needs to read repository code.
 permissions:
   contents: read
@@ -21,6 +23,8 @@ jobs:
     # Preserve the existing status-check name.
     name: API tests and Docker build
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
 
     # Allow time to build and scan both images.
     timeout-minutes: 25
@@ -260,3 +264,156 @@ jobs:
         run: |
           docker rm -f api-integration-test mock-model || true
           docker network rm ai-ci-network || true
+
+      # Preserve the exact images that passed tests and scanning for the
+      # separately permissioned main-branch publisher job.
+      - name: Save tested images for publishing
+        if: |
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+          github.ref == 'refs/heads/main'
+        run: |
+          docker save \
+            --output "$RUNNER_TEMP/ecr-images.tar" \
+            "secure-ai-platform-api:${GITHUB_SHA}" \
+            "secure-ai-platform-mock-model:${GITHUB_SHA}"
+
+      - name: Upload tested images
+        if: |
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+          github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ecr-images-${{ github.run_id }}
+          path: ${{ runner.temp }}/ecr-images.tar
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 1
+
+      - name: Report deferred image publishing
+        if: |
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+          github.ref == 'refs/heads/main' &&
+          vars.ECR_PUBLISHER_ROLE_ARN == ''
+        run: |
+          {
+            echo "## ECR publishing deferred"
+            echo ""
+            echo "Tests, image builds, integration checks and Trivy gates passed."
+            echo "Set the ECR_PUBLISHER_ROLE_ARN repository variable after the ECR repositories and publisher role are deployed, then run Application CI manually on main."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish-images:
+    name: Publish tested images to ECR
+    needs: test-and-build
+    if: |
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/main' &&
+      vars.ECR_PUBLISHER_ROLE_ARN != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download tested images
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: ecr-images-${{ github.run_id }}
+          path: image-artifact
+
+      - name: Load and verify tested images
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker load --input image-artifact/ecr-images.tar
+          docker image inspect \
+            "secure-ai-platform-api:${IMAGE_TAG}" \
+            "secure-ai-platform-mock-model:${IMAGE_TAG}" > /dev/null
+
+      # Only this main-branch job can request credentials via OIDC.
+      - name: Check image publisher role configuration
+        env:
+          IMAGE_PUBLISHER_ROLE_ARN: ${{ vars.ECR_PUBLISHER_ROLE_ARN }}
+        run: |
+          if [ -z "$IMAGE_PUBLISHER_ROLE_ARN" ]; then
+            echo "::error::Set the ECR_PUBLISHER_ROLE_ARN repository variable to the bootstrap role ARN."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials for image publishing
+        uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
+        with:
+          role-to-assume: ${{ vars.ECR_PUBLISHER_ROLE_ARN }}
+          aws-region: eu-central-1
+          allowed-account-ids: "429496640190"
+          role-session-name: ecr-publish-${{ github.run_id }}
+
+      # STEP 21: Confirm both Terraform-created repositories are available.
+      - name: Verify ECR repositories
+        run: |
+          aws ecr describe-repositories \
+            --region eu-central-1 \
+            --repository-names healthops-dev/api healthops-dev/mock-model \
+            --query 'repositories[].{Name:repositoryName,URI:repositoryUri,TagMutability:imageTagMutability,Encryption:encryptionConfiguration.encryptionType}' \
+            --output table
+
+      # STEP 22: Push only images that passed tests, integration and Trivy gates.
+      # Full commit SHA tags are compatible with the repositories' immutable-tag setting.
+      - name: Publish application images to ECR
+        env:
+          AWS_ACCOUNT_ID: "429496640190"
+          AWS_REGION: eu-central-1
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          registry="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          aws ecr get-login-password --region "$AWS_REGION" |
+            docker login --username AWS --password-stdin "$registry"
+
+          publish_or_reuse() {
+            local repository="$1"
+            local local_image="$2"
+            local tag_count
+
+            tag_count="$(aws ecr list-images \
+              --region "$AWS_REGION" \
+              --repository-name "$repository" \
+              --filter tagStatus=TAGGED \
+              --query "length(imageIds[?imageTag=='${IMAGE_TAG}'])" \
+              --output text)"
+
+            if [ "$tag_count" = "0" ]; then
+              docker tag "$local_image" "${registry}/${repository}:${IMAGE_TAG}"
+              docker push "${registry}/${repository}:${IMAGE_TAG}"
+            else
+              echo "Immutable tag already exists for ${repository}:${IMAGE_TAG}; reusing it."
+            fi
+
+            PUBLISHED_DIGEST="$(aws ecr describe-images \
+              --region "$AWS_REGION" \
+              --repository-name "$repository" \
+              --image-ids "imageTag=${IMAGE_TAG}" \
+              --query 'imageDetails[0].imageDigest' \
+              --output text)"
+
+            if [[ ! "$PUBLISHED_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+              echo "::error::Could not retrieve a valid image digest for ${repository}:${IMAGE_TAG}."
+              return 1
+            fi
+          }
+
+          publish_or_reuse healthops-dev/api "secure-ai-platform-api:${IMAGE_TAG}"
+          api_digest="$PUBLISHED_DIGEST"
+          publish_or_reuse healthops-dev/mock-model "secure-ai-platform-mock-model:${IMAGE_TAG}"
+          mock_digest="$PUBLISHED_DIGEST"
+
+          {
+            echo "## ECR image publishing completed"
+            echo ""
+            echo "- Commit: \`${IMAGE_TAG}\`"
+            echo "- API image: \`${registry}/healthops-dev/api@${api_digest}\`"
+            echo "- Mock-model image: \`${registry}/healthops-dev/mock-model@${mock_digest}\`"
+            echo ""
+            echo "Tags use the full commit SHA and the ECR repositories enforce tag immutability."
+          } >> "$GITHUB_STEP_SUMMARY"
