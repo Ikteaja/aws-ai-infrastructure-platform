@@ -90,8 +90,9 @@ uses module outputs instead of these IDs.
 | NAT, S3 endpoint, routes and seven standalone egress rules | Existing network configuration | Already created and checked in AWS; not duplicated here |
 | ECR images | `healthops-dev/api`, `healthops-dev/mock-model` | Already published; worker role gets pull-only permissions |
 | EKS cluster, node group, launch template, add-ons, log group and access entry | `ai-platform-dev` | Proposed by the dev Terraform module; not deployed |
-| EKS cluster, worker and VPC CNI IAM roles | `healthops-dev-eks-cluster`, `healthops-dev-eks-workers`, `healthops-dev-eks-vpc-cni` | Proposed in bootstrap; bootstrap must be reviewed/applied first |
-| EKS administrator role | `healthops-dev-eks-admin` | Present in the latest bootstrap state refresh; trust is configured for the verified SSO role |
+| EKS cluster, worker and VPC CNI IAM roles | `healthops-dev-eks-cluster`, `healthops-dev-eks-workers`, `healthops-dev-eks-vpc-cni` | Created by bootstrap on 6 October 2026 with required AWS-managed policy attachments |
+| EKS Terraform plan/apply policies | `healthops-dev-eks-plan-read`, `healthops-dev-eks-apply` | Created by bootstrap and attached to the Terraform plan/apply roles on 6 October 2026 |
+| EKS administrator role | `healthops-dev-eks-admin` | Existing; trust is configured for the verified SSO role |
 
 The existing administrator role trust names the previously verified IAM Identity
 Center role:
@@ -143,8 +144,13 @@ role does not create or broadly administer IAM identities:
   to those three roles and their respective AWS services. It does not receive
   administrator access.
 
-Review both bootstrap policies and the generated plan before applying them.
-Apply bootstrap first; dev planning reads the three service roles by name.
+The EKS service roles and scoped plan/apply policies were created and attached
+by a reviewed bootstrap apply on 6 October 2026 (11 resources added, none
+changed or destroyed). The plan role's attachment and effective permissions
+were then verified with AWS IAM policy simulation. Bootstrap does not need to
+be reapplied for this permission repair. Review and apply bootstrap again only
+if later changes to these IAM resources are proposed; dev planning reads the
+three service roles by name.
 See [IAM policy map](IAM-POLICY-MAP.md).
 
 GitHub repository Actions variables required by the plan and apply workflows:

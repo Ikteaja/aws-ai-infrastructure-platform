@@ -1,9 +1,10 @@
 # HealthOps EKS: configuration, mapping, and workflow
 
-**Status as of 6 October 2026:** Terraform and IAM configuration is prepared.
-The EKS cluster, node group, and add-ons have not been deployed or verified.
-This document describes the configuration in this repository, not a claim
-that the AWS resources already exist.
+**Status as of 6 October 2026:** Terraform configuration is prepared. Bootstrap
+created the three EKS service roles and the scoped EKS plan/apply policies,
+including the plan-policy attachment. The EKS cluster, node group, and add-ons
+have not been deployed or verified. This document distinguishes those live IAM
+prerequisites from the cluster resources still awaiting a reviewed dev apply.
 
 For deployment commands, troubleshooting, and post-deployment acceptance
 checks, see [the EKS deployment guide](../../../../docs/eks-deployment.md).
@@ -14,9 +15,9 @@ This milestone adds an EKS cluster named `ai-platform-dev`, one small
 On-Demand x86 CPU managed node group, EKS administrator access, and managed
 networking add-ons. It reuses the development VPC, private subnets,
 security groups, NAT gateway, S3 gateway endpoint, and ECR repositories.
-Bootstrap Terraform prepares the cluster/node/CNI IAM roles and the narrowly
+Bootstrap Terraform has created the cluster/node/CNI IAM roles and the narrowly
 scoped Terraform plan/apply policies. GitHub Actions can validate and plan;
-applying remains a separate, manually approved step.
+applying the dev cluster remains a separate, manually approved step.
 
 No Argo CD, Karpenter, Airflow, monitoring stack, GPU workers, or public
 application load balancer is included.
@@ -111,8 +112,8 @@ choice, not the production baseline.
 | [EKS module variables.tf](./variables.tf) | Defines the module contract for networking, security groups, role ARNs, administrator input, node sizing, logging, and tags. |
 | [EKS module outputs.tf](./outputs.tf) | Exposes cluster name, endpoint, AWS-managed cluster security-group ID, and CPU node-group name. |
 | [eks-admin-access module](../eks-admin-access/main.tf) | Creates the administrator access entry and cluster-scoped EKS administrator policy association. |
-| [bootstrap EKS roles](../../bootstrap/eks_workload_roles.tf) | Prepares the control-plane, worker, and VPC CNI IAM roles and attaches their AWS-managed permissions. |
-| [bootstrap managed policies](../../bootstrap/managed_policies.tf) | Defines and attaches EKS plan-read and apply policies to the existing Terraform roles. |
+| [bootstrap EKS roles](../../bootstrap/eks_workload_roles.tf) | Defines the control-plane, worker, and VPC CNI IAM roles and their AWS-managed permissions; applied on 6 October 2026. |
+| [bootstrap managed policies](../../bootstrap/managed_policies.tf) | Defines EKS plan-read and apply policies and attaches them to the existing Terraform roles; applied on 6 October 2026. |
 | [EKS apply policy](../../bootstrap/policies/managed/eks-apply.json) | Scopes create/update/delete permissions to this cluster and its named resources; scopes `iam:PassRole` to the three EKS service roles and their services. |
 | [EKS plan policy](../../bootstrap/policies/managed/eks-plan-read.json) | Provides read-only discovery of EKS, launch-template, log-group, subnet/security-group, and role information needed for planning. |
 | [Terraform plan workflow](../../../../.github/workflows/terraform-plan.yml) | Formats, validates, scans, authenticates with AWS OIDC, generates a saved plan, and publishes the plan artifact. It does not apply. |
@@ -161,8 +162,8 @@ security-group rule changes before applying.
 ```mermaid
 flowchart TD
     Source["Review Terraform and required inputs"]
-    Bootstrap["Bootstrap plan: EKS service roles + scoped plan/apply policies"]
-    BootstrapApply["Review and explicitly apply bootstrap plan"]
+    Bootstrap["Bootstrap EKS roles and policies: applied"]
+    BootstrapApply["Verify plan-role policy attachment"]
     AdminIP["Verify current public IPv4 /32"]
     DevPlan["Dev Plan workflow: validate, scan, AWS OIDC, saved plan"]
     Review["Review plan, resources, CIDR, and costs"]
@@ -180,9 +181,11 @@ flowchart TD
    `arn:aws:iam::429496640190:role/healthops-dev-eks-admin`; the CIDR must be
    the administrator's current IPv4 address with `/32`. The previously used
    `195.14.217.35/32` is historical and must not be assumed current.
-2. Review and apply bootstrap changes first. The dev plan reads the
-   bootstrap-managed roles and needs the updated plan policy. Use the existing
-   bootstrap approval process and inspect its saved plan before applying.
+2. Confirm that `healthops-dev-eks-plan-read` is attached to
+   `healthops-dev-terraform-plan-permissions`. The EKS roles and policy
+   attachments were created by bootstrap on 6 October 2026. If the attachment
+   is missing or future bootstrap changes are needed, review a new bootstrap
+   plan and apply only after confirming its changes.
 3. Run the Terraform Plan workflow. It performs formatting, validation, Trivy
    and Checkov scans, authenticates to AWS using GitHub OIDC, and saves the
    Terraform plan artifact. It does **not** apply infrastructure.
