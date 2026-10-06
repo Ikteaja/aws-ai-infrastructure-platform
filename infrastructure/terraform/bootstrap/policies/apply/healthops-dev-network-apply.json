@@ -1,5 +1,4 @@
-Remove-Item Env:TF_CLI_ARGS_plan
-terraform plan -out=dev.tfplan{
+{
   "Version": "2012-10-17",
   "Statement": [
     {
