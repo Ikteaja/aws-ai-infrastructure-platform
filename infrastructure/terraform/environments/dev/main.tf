@@ -13,7 +13,7 @@ module "document_storage" {
     DataType    = "synthetic"
   }
 }
-#####################network modules#############################
+#####################network modules############################
 # Create the development network using our reusable module.
 module "network" {
   # Resolve the module directory relative to environments/dev.
