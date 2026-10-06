@@ -23,6 +23,7 @@ All abbreviated policy names below have the prefix `healthops-dev-`.
 | Same plan role | Same trust | `kms-plan` | Read document-key configuration, restricted by tags |
 | Same plan role | Same trust | `ecr-plan` | Read the two dev repositories and tagged ECR key |
 | Same plan role | Same trust | Managed `network-plan-read` | Read VPC, routes, gateways, endpoints, security groups, Flow Logs and network resource metadata for dev planning |
+| Same plan role | Same trust | Managed `eks-plan-read` | Read only the `ai-platform-dev` cluster, CPU node group, add-ons, access entry, launch template, log group and named workload roles |
 | Same plan role | Same trust | `cost-reporting` | `ce:GetCostAndUsage` account spending report |
 | `healthops-dev-terraform-apply` | GitHub OIDC, repository main subject | `terraform-apply-permissions` | Update dev state and document bucket configuration |
 | Same apply role | Same trust | `terraform-apply` | Document bucket notifications; not a duplicate of the preceding policy |
@@ -30,14 +31,18 @@ All abbreviated policy names below have the prefix `healthops-dev-`.
 | Same apply role | Same trust | `ecr-apply` | Manage the tagged ECR key and two dev repositories |
 | Same apply role | Same trust | `network-apply` | Configure dev network, read network resource metadata, Flow Logs key/log group and the specific Flow Logs role; scoped `iam:PassRole` |
 | Same apply role | Same trust | Managed `network-egress-apply` | Manage the dev NAT, Internet Gateway, S3 gateway endpoint and EKS connectivity security groups |
+| Same apply role | Same trust | Managed `eks-apply` | Manage only the named dev EKS cluster, CPU node group, add-ons, administrator association, log group and named launch template; scoped `iam:PassRole` |
 | `healthops-dev-ecr-image-publisher` | GitHub OIDC, repository main subject only | `ecr-image-publisher` | Push and inspect images in only the two dev repositories |
 | `healthops-dev-vpc-flow-logs` | `vpc-flow-logs.amazonaws.com` | `vpc-flow-logs-publish` | Publish network metadata to the dedicated CloudWatch log group |
 | `healthops-dev-eks-admin` | Verified AWS IAM Identity Center SSO role ARN in `policies/eks-admin/trust.json` | No AWS permissions attached | Dedicated assumed identity for EKS Kubernetes administrator access; EKS authorization comes from the cluster access-policy association |
+| `healthops-dev-eks-cluster` | `eks.amazonaws.com` | AWS-managed `AmazonEKSClusterPolicy` | Control-plane infrastructure operations |
+| `healthops-dev-eks-workers` | `ec2.amazonaws.com` | AWS-managed `AmazonEKSWorkerNodePolicy` and `AmazonEC2ContainerRegistryPullOnly` | Worker registration and private ECR pulls |
+| `healthops-dev-eks-vpc-cni` | `pods.eks.amazonaws.com`, limited to `ai-platform-dev` | AWS-managed `AmazonEKS_CNI_Policy` | Dedicated EKS Pod Identity for VPC CNI networking |
 
 The adoption baseline is a point-in-time record: it showed the network read
 managed policy as unattached. The current bootstrap configuration declares the
-plan-role attachment and the new apply-role managed network policy; those desired
-changes take effect only after an approved bootstrap apply. Exact adopted
+plan-role attachment and managed network policies; those desired changes take
+effect only after an approved bootstrap apply. Exact adopted
 addresses and import IDs: [iam-resource-map.json](iam-resource-map.json).
 Point-in-time IAM evidence: [iam-adoption-baseline.json](iam-adoption-baseline.json);
 it contains no credentials.

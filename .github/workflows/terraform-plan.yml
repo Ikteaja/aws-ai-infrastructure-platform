@@ -31,6 +31,7 @@ env:
   TF_VAR_aws_account_id: "429496640190"
   TF_VAR_aws_region: "eu-central-1"
   TF_VAR_document_bucket_name: "healthops-dev-documents-429496640190"
+  TF_VAR_eks_kubernetes_version: "1.35"
 
 jobs:
   # Validate administrative IAM configuration without AWS credentials.
@@ -156,17 +157,12 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
 
-      # Optional until the EKS cluster milestone. If either value is supplied,
-      # require both and pass a validated object into Terraform.
-      - name: Configure optional EKS administrator inputs
+      # EKS planning requires both values; the apply workflow re-confirms the CIDR.
+      - name: Configure EKS administrator inputs
         env:
           EKS_ADMIN_PUBLIC_IPV4_CIDR: ${{ vars.EKS_ADMIN_PUBLIC_IPV4_CIDR }}
           EKS_ADMIN_IAM_ROLE_ARN: ${{ vars.EKS_ADMIN_IAM_ROLE_ARN }}
         run: |
-          if [ -z "$EKS_ADMIN_PUBLIC_IPV4_CIDR" ] && [ -z "$EKS_ADMIN_IAM_ROLE_ARN" ]; then
-            exit 0
-          fi
-
           if [ -z "$EKS_ADMIN_PUBLIC_IPV4_CIDR" ] || [ -z "$EKS_ADMIN_IAM_ROLE_ARN" ]; then
             echo "::error::Set both EKS_ADMIN_PUBLIC_IPV4_CIDR and EKS_ADMIN_IAM_ROLE_ARN repository variables."
             exit 1

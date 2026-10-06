@@ -62,3 +62,23 @@ output "ecr_kms_key_arn" {
   description = "ARN of the customer-managed ECR encryption key."
   value       = module.ecr.kms_key_arn
 }
+
+output "eks_cluster_name" {
+  description = "Development EKS cluster name."
+  value       = module.eks.cluster_name
+}
+
+output "eks_cluster_endpoint" {
+  description = "Development Kubernetes API endpoint."
+  value       = module.eks.cluster_endpoint
+}
+
+output "eks_cluster_security_group_id" {
+  description = "AWS-managed EKS cluster security group attached to control-plane interfaces; it is not attached to CPU workers."
+  value       = module.eks.cluster_security_group_id
+}
+
+output "eks_cpu_node_group_name" {
+  description = "Initial CPU managed node group name."
+  value       = module.eks.cpu_node_group_name
+}

@@ -12,6 +12,10 @@ on:
         description: "Type apply-dev to approve the selected plan"
         required: true
         type: string
+      confirmed_admin_public_ipv4_cidr:
+        description: "For EKS create/update plans, enter the current /32 and ensure it matches the repository variable"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -24,12 +28,13 @@ env:
   TF_VAR_aws_account_id: "429496640190"
   TF_VAR_aws_region: "eu-central-1"
   TF_VAR_document_bucket_name: "healthops-dev-documents-429496640190"
+  TF_VAR_eks_kubernetes_version: "1.35"
 
 jobs:
   apply:
     name: Verify approval and apply
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 60
 
     permissions:
       contents: read
@@ -158,16 +163,12 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
 
-      # Configure optional EKS inputs for the apply environment.
-      - name: Configure optional EKS administrator inputs
+      # EKS is now part of the dev configuration; both values are required.
+      - name: Configure EKS administrator inputs
         env:
           EKS_ADMIN_PUBLIC_IPV4_CIDR: ${{ vars.EKS_ADMIN_PUBLIC_IPV4_CIDR }}
           EKS_ADMIN_IAM_ROLE_ARN: ${{ vars.EKS_ADMIN_IAM_ROLE_ARN }}
         run: |
-          if [ -z "$EKS_ADMIN_PUBLIC_IPV4_CIDR" ] && [ -z "$EKS_ADMIN_IAM_ROLE_ARN" ]; then
-            exit 0
-          fi
-
           if [ -z "$EKS_ADMIN_PUBLIC_IPV4_CIDR" ] || [ -z "$EKS_ADMIN_IAM_ROLE_ARN" ]; then
             echo "::error::Set both EKS_ADMIN_PUBLIC_IPV4_CIDR and EKS_ADMIN_IAM_ROLE_ARN repository variables."
             exit 1
@@ -191,6 +192,27 @@ jobs:
       - name: Initialize remote state
         working-directory: infrastructure/terraform/environments/dev
         run: terraform init -lockfile=readonly
+
+      # Require an explicit current-IP confirmation when this plan creates or
+      # changes the public EKS API allowlist.
+      - name: Confirm current administrator CIDR for EKS changes
+        working-directory: infrastructure/terraform/environments/dev
+        env:
+          CONFIRMED_ADMIN_CIDR: ${{ inputs.confirmed_admin_public_ipv4_cidr }}
+          CONFIGURED_ADMIN_CIDR: ${{ vars.EKS_ADMIN_PUBLIC_IPV4_CIDR }}
+        run: |
+          cluster_actions="$(terraform show -json "$GITHUB_WORKSPACE/plan-artifact/dev.tfplan" \
+            | jq -r '[.resource_changes[]? |
+              select(.address == "module.eks.aws_eks_cluster.this") |
+              .change.actions[]?] | unique | join(",")')"
+
+          if [[ "$cluster_actions" == *create* || "$cluster_actions" == *update* ]]; then
+            if [[ -z "$CONFIRMED_ADMIN_CIDR" ||
+                  "$CONFIRMED_ADMIN_CIDR" != "$CONFIGURED_ADMIN_CIDR" ]]; then
+              echo "::error::This plan creates or updates EKS. Check your current public IPv4 /32, update EKS_ADMIN_PUBLIC_IPV4_CIDR if needed, generate a new plan, and enter the exact CIDR in confirmed_admin_public_ipv4_cidr."
+              exit 1
+            fi
+          fi
 
       # STEP 6: Check main again immediately before applying.
       - name: Confirm planned commit is still current
