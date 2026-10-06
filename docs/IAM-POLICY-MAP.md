@@ -22,13 +22,13 @@ All abbreviated policy names below have the prefix `healthops-dev-`.
 | `healthops-dev-terraform-plan-permissions` | GitHub OIDC, repository main and pull-request subjects | `terraform-plan-permissions` | Read dev state and document bucket settings; write/delete only the dev state lock |
 | Same plan role | Same trust | `kms-plan` | Read document-key configuration, restricted by tags |
 | Same plan role | Same trust | `ecr-plan` | Read the two dev repositories and tagged ECR key |
-| Same plan role | Same trust | Managed `network-plan-read` | Read VPC, routes, gateways, endpoints, security groups and Flow Logs for dev planning |
+| Same plan role | Same trust | Managed `network-plan-read` | Read VPC, routes, gateways, endpoints, security groups, Flow Logs and network resource metadata for dev planning |
 | Same plan role | Same trust | `cost-reporting` | `ce:GetCostAndUsage` account spending report |
 | `healthops-dev-terraform-apply` | GitHub OIDC, repository main subject | `terraform-apply-permissions` | Update dev state and document bucket configuration |
 | Same apply role | Same trust | `terraform-apply` | Document bucket notifications; not a duplicate of the preceding policy |
 | Same apply role | Same trust | `kms-apply` | Create and configure tagged document encryption keys |
 | Same apply role | Same trust | `ecr-apply` | Manage the tagged ECR key and two dev repositories |
-| Same apply role | Same trust | `network-apply` | Configure dev network, Flow Logs key/log group and the specific Flow Logs role; scoped `iam:PassRole` |
+| Same apply role | Same trust | `network-apply` | Configure dev network, read network resource metadata, Flow Logs key/log group and the specific Flow Logs role; scoped `iam:PassRole` |
 | Same apply role | Same trust | Managed `network-egress-apply` | Manage the dev NAT, Internet Gateway, S3 gateway endpoint and EKS connectivity security groups |
 | `healthops-dev-ecr-image-publisher` | GitHub OIDC, repository main subject only | `ecr-image-publisher` | Push and inspect images in only the two dev repositories |
 | `healthops-dev-vpc-flow-logs` | `vpc-flow-logs.amazonaws.com` | `vpc-flow-logs-publish` | Publish network metadata to the dedicated CloudWatch log group |
