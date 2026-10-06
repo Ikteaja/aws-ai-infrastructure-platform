@@ -5,7 +5,6 @@ resource "aws_security_group" "eks_control_plane" {
   name        = "${var.name}-eks-control-plane"
   description = "Additional EKS control-plane security group for ${var.name}."
   vpc_id      = aws_vpc.this.id
-  egress      = []
 
   tags = merge(var.tags, {
     Name = "${var.name}-eks-control-plane"
@@ -17,7 +16,6 @@ resource "aws_security_group" "eks_workers" {
   name        = "${var.name}-eks-workers"
   description = "EKS worker security group for ${var.name}; no SSH ingress."
   vpc_id      = aws_vpc.this.id
-  egress      = []
 
   tags = merge(var.tags, {
     Name = "${var.name}-eks-workers"
