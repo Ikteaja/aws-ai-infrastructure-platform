@@ -12,6 +12,11 @@ data "aws_subnet" "private" {
   id = each.value
 }
 
+# Kubernetes 1.28+ enables envelope encryption for all API data by default.
+#trivy:ignore:AWS-0039
+# Public kubectl access is required for this lab and is restricted to the
+# administrator's explicitly configured IPv4 /32.
+#trivy:ignore:AWS-0040
 resource "aws_eks_cluster" "this" {
   name                          = var.name
   role_arn                      = var.cluster_role_arn
