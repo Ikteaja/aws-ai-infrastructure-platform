@@ -1,9 +1,11 @@
 # HealthOps EKS dev deployment
 
-**Status: Terraform and IAM configuration prepared; the EKS cluster and node
-group have not been deployed or verified.** This guide describes the proposed
-`ai-platform-dev` lab deployment. No Terraform apply or destroy is authorized
-by this change.
+**Status as of 8 October 2026:** The EKS cluster reports `ACTIVE`. A partial
+apply created the cluster and some supporting resources, but the managed node
+group and VPC CNI/CoreDNS add-ons are not present. The cluster is not ready for
+application workloads. Networking and DNS flows below describe the intended
+configuration after those components are deployed. This guide distinguishes
+live resources from remaining configuration; no destroy has been run.
 
 ## Architecture
 
@@ -49,6 +51,94 @@ prepared security group.
 | Application images | Existing `healthops-dev/api` and `healthops-dev/mock-model` ECR repositories |
 | Public application access | Not included; services remain ClusterIP and no ALB is created |
 
+## How Kubernetes networking and DNS fit together
+
+The cluster has two distinct IP ranges:
+
+| Range/address | Meaning |
+|---|---|
+| VPC `10.40.0.0/16` | Overall AWS private network range. |
+| Private subnet A `10.40.16.0/20` and B `10.40.32.0/20` | AWS assigns a private IP from a subnet to each worker node. The AWS VPC CNI also allocates pod IPs from VPC subnet capacity in its standard IPv4 mode. |
+| EKS Service CIDR `172.20.0.0/16` | Separate virtual range used for Kubernetes Service `ClusterIP` addresses. It is not a VPC subnet and does not assign addresses to EC2 instances or pods. The live cluster reports this range; Terraform did not explicitly choose it. |
+
+**VPC CNI** means Container Network Interface; it is not a VPN. It manages
+pod networking and VPC IP allocation through worker network interfaces. A
+pod's VPC CNI IP is the destination address used for pod-to-pod traffic.
+Kubernetes Services add a stable virtual address in `172.20.0.0/16`.
+`kube-proxy` forwards traffic sent to a Service IP to one of that Service's
+ready pod IPs. Therefore a pod IP can change when a pod is replaced, while
+clients can keep using the same Service name and address. A recreated Service
+may receive a different ClusterIP; the cluster's Service CIDR is selected at
+cluster creation and is not an ordinary update setting.
+
+**CoreDNS** runs inside the Kubernetes cluster and answers DNS queries from
+pods. In the checked-in manifests the mock-model Service is named `mock-model`
+in namespace `ai-platform`. The API and mock-model are in that same namespace,
+so the API uses the short name `mock-model`; its full DNS name is
+`mock-model.ai-platform.svc.cluster.local`. CoreDNS returns that Service's
+ClusterIP; `kube-proxy` then forwards the connection to a ready model pod.
+CoreDNS also forwards non-Kubernetes names to an upstream resolver, so
+workloads can resolve external names such as ECR endpoints. CoreDNS does not
+create public DNS records or expose an application to users.
+
+Public DNS at a registrar/provider is for people outside the cluster: a future
+HealthOps domain record would point to a public application load balancer, which
+would route requests to the API. No application load balancer or public
+application DNS record is included in this milestone. `kubectl` uses the
+separate AWS-provided EKS API endpoint DNS name, restricted by the
+administrator's public IPv4 `/32`.
+
+```text
+API pod -> http://mock-model:8002
+        -> CoreDNS resolves mock-model to Service ClusterIP (172.20.x.x)
+        -> kube-proxy forwards TCP 8002 to ready model pod IP (10.40.x.x)
+
+Future user -> public registrar DNS -> application load balancer
+            -> secure-ai-api Service (port 8000) -> API pod (port 8000)
+
+Administrator -> AWS SSO role -> AWS EKS API endpoint (not CoreDNS)
+```
+
+The API-to-model URL above is **internal pod-to-Service traffic**, not a URL
+for a user's browser. Both application Services in the checked-in manifests
+are `ClusterIP`, so they are reachable only from inside the cluster. There is
+no public app DNS name, Ingress, or load balancer configured in this milestone.
+The `secure-ai-api` Service will be the in-cluster address for the API. A
+browser can reach it externally only after a separate ingress/load-balancer
+and public DNS configuration is added. During development, use an approved
+port-forward or internal test path instead.
+
+### What do the two port fields mean?
+
+The model container declares `containerPort: 8002` in
+`kubernetes/base/mock-model-deployment.yaml`. Its Service declares `port: 8002`
+and `targetPort: http` in `kubernetes/base/mock-model-service.yaml`; `http`
+refers to the container port named `http`. Here both numeric ports happen to
+be 8002, but they have different roles:
+
+| Field | Example | Used by |
+|---|---:|---|
+| `containerPort` | `8002` | Port on which the mock-model process listens inside its pod. |
+| Service `port` | `8002` | Port clients use on the stable Service address; this is the `:8002` in `http://mock-model:8002`. |
+| Service `targetPort` | `http` → `8002` | Destination port on the selected pod; Kubernetes maps Service traffic to it. |
+
+Likewise, the API process listens on container port 8000, and the
+`secure-ai-api` Service exposes Service port 8000 and targets the API
+container's named `http` port. The API's `MODEL_BASE_URL` points to the
+mock-model Service, not directly to a pod IP. Kubernetes DNS resolves the
+hostname; the port is used for the TCP connection, not resolved by DNS.
+
+Inspect the live cluster's Service CIDR with:
+
+```powershell
+aws eks describe-cluster `
+  --name ai-platform-dev `
+  --region eu-central-1 `
+  --profile ai-lab-admin `
+  --query "cluster.kubernetesNetworkConfig.serviceIpv4Cidr" `
+  --output text
+```
+
 Kubernetes `1.35` was selected on 6 October 2026. AWS lists it in standard
 support through 27 March 2027. AWS's current VPC CNI, CoreDNS, and kube-proxy
 compatibility tables include 1.35. Terraform queries the EKS API for the newest
@@ -89,9 +179,12 @@ uses module outputs instead of these IDs.
 | Prepared worker SG | `sg-0b14ae0a05f3d32b7` | Existing; reused through `module.network.eks_worker_security_group_id` |
 | NAT, S3 endpoint, routes and seven standalone egress rules | Existing network configuration | Already created and checked in AWS; not duplicated here |
 | ECR images | `healthops-dev/api`, `healthops-dev/mock-model` | Already published; worker role gets pull-only permissions |
-| EKS cluster, node group, launch template, add-ons, log group and access entry | `ai-platform-dev` | Proposed by the dev Terraform module; not deployed |
+| EKS cluster | `ai-platform-dev` | Deployed; live AWS check reports `ACTIVE`, Kubernetes `1.35` |
+| EKS add-ons | `eks-pod-identity-agent`, `kube-proxy` | Present in live add-on inventory; VPC CNI and CoreDNS are not present yet |
+| EKS node group | `ai-platform-dev-cpu` | Not present in live AWS check; there are no worker nodes yet |
+| Launch template, log group and administrator access entry | `ai-platform-dev` | Recorded in dev Terraform state from the partial apply |
 | EKS cluster, worker and VPC CNI IAM roles | `healthops-dev-eks-cluster`, `healthops-dev-eks-workers`, `healthops-dev-eks-vpc-cni` | Created by bootstrap on 6 October 2026 with required AWS-managed policy attachments |
-| EKS Terraform plan/apply policies | `healthops-dev-eks-plan-read`, `healthops-dev-eks-apply` | Created by bootstrap and attached to the Terraform plan/apply roles on 6 October 2026 |
+| EKS Terraform plan/apply policies | `healthops-dev-eks-plan-read`, `healthops-dev-eks-apply` | Created and attached on 6 October; Pod Identity permissions updated on 8 October 2026 |
 | EKS administrator role | `healthops-dev-eks-admin` | Existing; trust is configured for the verified SSO role |
 
 The existing administrator role trust names the previously verified IAM Identity
@@ -150,17 +243,21 @@ role does not create or broadly administer IAM identities:
 The EKS service roles and scoped plan/apply policies were created and attached
 by a reviewed bootstrap apply on 6 October 2026 (11 resources added, none
 changed or destroyed). The plan role's attachment and effective permissions
-were then verified with AWS IAM policy simulation. Bootstrap does not need to
-be reapplied for this permission repair. Review and apply bootstrap again only
-if later changes to these IAM resources are proposed; dev planning reads the
-three service roles by name.
+were then verified with AWS IAM policy simulation. The first EKS deployment
+attempt failed because the apply policy did not allow
+`eks:CreatePodIdentityAssociation` for the VPC CNI add-on. On 8 October, a
+reviewed bootstrap apply updated the plan/apply policies in place (two policies
+changed; no resources added or destroyed). IAM simulation confirmed the apply
+role is now allowed to create the association for this cluster. The failed dev
+apply was not automatically retried; generate and review a fresh dev plan
+before retrying. Dev planning reads the three service roles by name.
 See [IAM policy map](IAM-POLICY-MAP.md).
 
 GitHub repository Actions variables required by the plan and apply workflows:
 
 | Variable | Value |
 |---|---|
-| `EKS_ADMIN_PUBLIC_IPV4_CIDR` | The administrator's **currently verified** public IPv4 `/32`; do not assume the old `195.14.217.35/32` is still current |
+| `EKS_ADMIN_PUBLIC_IPV4_CIDR` | The administrator's **currently verified** public IPv4 `/32`; previously recorded CIDRs are historical and must not be assumed current |
 | `EKS_ADMIN_IAM_ROLE_ARN` | `arn:aws:iam::429496640190:role/healthops-dev-eks-admin` |
 
 The apply workflow requires the current CIDR to be entered again when a saved
