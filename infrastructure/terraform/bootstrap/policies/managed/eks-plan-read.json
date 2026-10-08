@@ -1,0 +1,102 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadDevEksResources",
+      "Effect": "Allow",
+      "Action": [
+        "eks:DescribeCluster",
+        "eks:DescribeNodegroup",
+        "eks:DescribeAddon",
+        "eks:DescribeAccessEntry",
+        "eks:DescribeUpdate",
+        "eks:ListClusters",
+        "eks:ListNodegroups",
+        "eks:ListAddons",
+        "eks:ListAccessEntries",
+        "eks:ListAssociatedAccessPolicies",
+        "eks:ListTagsForResource"
+      ],
+      "Resource": [
+        "arn:aws:eks:eu-central-1:429496640190:cluster/ai-platform-dev",
+        "arn:aws:eks:eu-central-1:429496640190:nodegroup/ai-platform-dev/ai-platform-dev-cpu/*",
+        "arn:aws:eks:eu-central-1:429496640190:addon/ai-platform-dev/*",
+        "arn:aws:eks:eu-central-1:429496640190:access-entry/ai-platform-dev/*",
+        "arn:aws:eks:eu-central-1:429496640190:podidentityassociation/ai-platform-dev/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1"
+        }
+      }
+    },
+    {
+      "Sid": "DiscoverEksVersionsAndClusters",
+      "Effect": "Allow",
+      "Action": [
+        "eks:DescribeAddonVersions",
+        "eks:ListClusters"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1"
+        }
+      }
+    },
+    {
+      "Sid": "ReadEksLaunchTemplateAndNetworkMetadata",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeLaunchTemplates",
+        "ec2:DescribeLaunchTemplateVersions",
+        "ec2:DescribeInstanceTypes",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeSecurityGroups"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1"
+        }
+      }
+    },
+    {
+      "Sid": "ReadEksExecutionRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRoleTags"
+      ],
+      "Resource": [
+        "arn:aws:iam::429496640190:role/healthops-dev-eks-cluster",
+        "arn:aws:iam::429496640190:role/healthops-dev-eks-workers",
+        "arn:aws:iam::429496640190:role/healthops-dev-eks-vpc-cni",
+        "arn:aws:iam::429496640190:role/healthops-dev-eks-admin"
+      ]
+    },
+    {
+      "Sid": "DiscoverEksLogGroups",
+      "Effect": "Allow",
+      "Action": "logs:DescribeLogGroups",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1"
+        }
+      }
+    },
+    {
+      "Sid": "ReadEksLogGroupTags",
+      "Effect": "Allow",
+      "Action": "logs:ListTagsForResource",
+      "Resource": [
+        "arn:aws:logs:eu-central-1:429496640190:log-group:/aws/eks/ai-platform-dev/cluster",
+        "arn:aws:logs:eu-central-1:429496640190:log-group:/aws/eks/ai-platform-dev/cluster:*"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowEksPodIdentityForDevCluster",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "pods.eks.amazonaws.com"
+      },
+      "Action": [
+        "sts:AssumeRole",
+        "sts:TagSession"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:SourceAccount": "429496640190"
+        },
+        "ArnLike": {
+          "aws:SourceArn": "arn:aws:eks:eu-central-1:429496640190:cluster/ai-platform-dev"
+        }
+      }
+    }
+  ]
+}

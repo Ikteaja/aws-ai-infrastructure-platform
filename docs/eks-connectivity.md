@@ -12,33 +12,26 @@ hostnames are enabled. The current private routes are VPC-local only. The
 proposed public `/24` ranges are not currently allocated to subnets in this VPC.
 The ECR repositories and published images are already in place.
 
-The read-only inventory found no Internet Gateway attached to the VPC, NAT
-Gateway, VPC endpoint, EKS cluster in the dev region, or pending/running EC2
-instance in either private subnet. The Terraform configuration did **not**
-previously contain public subnets, these egress resources, an EKS node group,
-worker IAM role, or Kubernetes API endpoint. This change adds the NAT-based network
-configuration and EKS security groups to Terraform, but they are **not deployed
-until the normal reviewed plan/apply workflow applies them**. No EKS cluster or
-worker connectivity has been created or tested by this change.
-
-The EKS administrator inputs and access-entry module are prepared for the later
-cluster milestone. They are not wired into a live cluster. No application
-endpoint (Load Balancer, ingress or public application URL) is created here.
+The initial read-only inventory predates the networking deployment. The NAT,
+S3 gateway endpoint, private routes and prepared security groups now exist, and
+the seven required standalone outbound rules have been checked in AWS. The
+`ai-platform-dev` EKS module and bootstrap IAM changes are now prepared, but
+the EKS cluster, node group and add-ons remain **not deployed**. See
+[eks-deployment.md](eks-deployment.md) for the current plan and deployment
+procedure. No application endpoint (Load Balancer, ingress or public
+application URL) is part of this milestone.
 
 | Resource or configuration | Status after this change |
 |---|---|
 | Existing VPC, private subnets, route tables and DNS | Live-checked in `eu-central-1`; both private subnets have public-IP assignment disabled and local-only routes |
 | Flow Logs, encrypted document bucket and ECR | Tracked by the existing dev deployment/state; unchanged by this connectivity plan |
-| Public subnets, Internet Gateway and default public route | Added to dev Terraform; awaiting reviewed apply |
-| One NAT Gateway and Elastic IP in public subnet `a` | Added to dev Terraform; awaiting reviewed apply |
-| Default routes from both private route tables to NAT | Added to dev Terraform; awaiting reviewed apply |
-| S3 gateway endpoint attached to private route tables | Added to dev Terraform; awaiting reviewed apply; no prior endpoint was defined |
-| Additional EKS control-plane and worker security groups | Added to dev Terraform; awaiting reviewed apply; no cluster/node group exists yet |
-| EKS cluster, workers and worker IAM role with ECR pull rights | Not created; future EKS milestone |
-| Validated administrator `/32` and IAM role inputs | Set in ignored local dev tfvars; GitHub Actions variables still need configuring when EKS is integrated |
-| Dedicated `healthops-dev-eks-admin` role | Declared in bootstrap Terraform; live AWS check confirmed it does not currently exist |
-| SSO assume-role permission | Verified SSO role already has AWS-managed `AdministratorAccess`; IAM simulation allows `sts:AssumeRole` to the proposed role ARN |
-| EKS administrator access entry and cluster-admin association | Reusable module and integration example prepared; not called without a cluster; proposed principal ARN is not live yet |
+| Public subnets, Internet Gateway, NAT, routes and S3 gateway endpoint | Existing; already deployed |
+| Additional EKS control-plane and worker security groups and seven outbound rules | Existing; standalone rule ownership retained and rules checked in AWS |
+| EKS cluster, workers and core add-ons | Prepared in dev Terraform; not deployed |
+| Cluster, worker and VPC CNI roles and workflow policies | Prepared in bootstrap Terraform; apply and verify before dev planning |
+| Administrator CIDR and IAM role inputs | Required by dev Terraform; confirm current public IPv4 `/32` before every cluster create/update |
+| Dedicated `healthops-dev-eks-admin` role | Exists in bootstrap state and has the previously verified SSO trust |
+| EKS administrator access entry and cluster-admin association | Wired to the EKS module; not deployed until the cluster is created |
 | Public application endpoint | Not created; separate application-deployment milestone |
 
 ## Image-pull workflow
@@ -72,11 +65,11 @@ gateway for ECR API/registry calls, AWS APIs, GitHub and external registries.
 The S3 gateway endpoint gives the private subnets a direct route for S3 traffic,
 including ECR image-layer downloads; that traffic does not traverse the NAT.
 
-When an EKS node role is created, attach the AWS-managed
-`AmazonEC2ContainerRegistryPullOnly` policy to that **dedicated worker role**.
-EKS also needs its normal node and CNI permissions. Do not attach ECR pull
-permissions to the publisher role or Terraform execution role. No worker role
-exists yet, so this change does not create or attach one.
+The bootstrap module prepares a dedicated worker role with
+`AmazonEC2ContainerRegistryPullOnly` and `AmazonEKSWorkerNodePolicy`. VPC CNI
+permissions are on a separate Pod Identity role. Do not attach ECR pull
+permissions to the publisher role or Terraform execution role. These roles
+must be applied through bootstrap before deploying dev EKS.
 
 ## Administrator `kubectl` workflow
 
@@ -129,17 +122,19 @@ permissions to that role.
 | Worker security group egress | To VPC CIDR, TCP/UDP 53 | VPC and public DNS lookups |
 | Control-plane security group ingress | From worker group, TCP 443 | Worker access to the Kubernetes API |
 | Control-plane security group egress | To worker group, TCP 10250 and TCP 443 | Control-plane access to kubelet and HTTPS webhooks; add explicit webhook ports only when required |
-| Worker IAM role (future) | `AmazonEC2ContainerRegistryPullOnly` | Pull authorization for private ECR; separate from Terraform and image publishing |
-| Administrator IAM role (future) | EKS access entry plus `AmazonEKSClusterAdminPolicy` | Kubernetes authorization after AWS IAM authentication |
-| Public Kubernetes endpoint (future) | Exactly the supplied admin IPv4 `/32` | Restricts internet-side `kubectl`; never use `0.0.0.0/0` |
+| Worker IAM role (prepared in bootstrap) | `AmazonEC2ContainerRegistryPullOnly` and `AmazonEKSWorkerNodePolicy` | Pull authorization for private ECR; separate from Terraform and image publishing |
+| Administrator IAM role | EKS access entry plus `AmazonEKSClusterAdminPolicy` | Kubernetes authorization after AWS IAM authentication |
+| Public Kubernetes endpoint (proposed) | Exactly the freshly confirmed administrator IPv4 `/32` | Restricts internet-side `kubectl`; never use `0.0.0.0/0` |
 | Application endpoint (future) | Separate service/load-balancer policy | Serves application users; not the Kubernetes API allowlist |
 
 The default VPC security group remains restricted and is not reused for workers.
-The prepared EKS security groups are additional groups; retain the
-EKS-managed cluster security group when the future cluster and node group are
-configured. Checkov flags these unattached groups because no cluster or nodes
-exist yet; the narrow inline exceptions apply only until the EKS milestone
-attaches them. Remove those exceptions after association. The control-plane
+The prepared additional control-plane SG attaches to the cluster interfaces.
+The managed-node-group launch template attaches only the prepared worker SG;
+it does not attach the AWS-managed cluster SG to workers. Explicit ingress and
+egress rules between the prepared groups provide the API, kubelet, webhook and
+node paths. Checkov flags these unattached groups before EKS is deployed; the
+narrow inline exceptions apply only until the EKS milestone attaches them.
+Remove those exceptions after association. The control-plane
 rules use TCP 10250 for kubelet rather than a broad range that also includes
 remote-desktop ports. Add any workload webhook port explicitly when that
 workload is introduced. Trivy flags unrestricted HTTPS egress as critical; the
@@ -148,11 +143,11 @@ Before production, replace it with a controlled egress firewall or proxy and
 explicit destination policy, then remove the exception. NAT provides address
 translation, not destination filtering.
 
-## Terraform inputs and future EKS integration
+## Terraform inputs and EKS integration
 
-The dev root accepts an optional object so current plans do not require
-administrator details before a cluster exists. When EKS is integrated, supply
-both values. Terraform validation requires a real IPv4 `/32` other than
+The dev root requires an administrator object for the EKS cluster. Supply
+both values, and confirm the public address is current before planning an EKS
+create or update. Terraform validation requires a real IPv4 `/32` other than
 `0.0.0.0/32`, and an IAM role ARN in the same 12-digit account as the cluster.
 There is no default public CIDR or role.
 
@@ -166,15 +161,15 @@ eks_administrator = {
 }
 ```
 
-The exact IP was supplied by the administrator. The role ARN above is the
-**proposed ARN**, not an existing AWS role. A live IAM lookup found no
-`healthops-dev-eks-admin`; bootstrap Terraform now declares that role without
-an IAM path and trusts only the verified SSO role:
+The `195.14.217.35/32` value was supplied earlier and is historical; do not
+assume it is still current. The role ARN is now an existing bootstrap-managed
+role. Bootstrap refresh confirmed the role is present, and its trust is
+configured for the verified SSO role:
 `arn:aws:iam::429496640190:role/aws-reserved/sso.amazonaws.com/eu-central-1/AWSReservedSSO_AdministratorAccess_4af4e9b42a20d275`.
-That SSO role has the AWS-managed `AdministratorAccess` policy, and IAM policy
-simulation confirmed it can call `sts:AssumeRole` on the proposed role ARN.
-The dedicated role has no broad AWS permissions; Kubernetes administrator
-authorization is prepared separately via the EKS access policy association.
+That SSO role has the AWS-managed `AdministratorAccess` policy, and the
+previous IAM simulation confirmed it can call `sts:AssumeRole`. The dedicated
+role has no broad AWS permissions; Kubernetes administrator authorization
+comes from the cluster-scoped EKS access policy association.
 
 The existing `infrastructure/terraform/environments/dev/variables.tf` defines
 and validates this object. The supplied values are in the ignored local
@@ -182,37 +177,28 @@ and validates this object. The supplied values are in the ignored local
 `.gitignore` excludes `*.tfvars`. The file is local-only and is not included in
 GitHub Actions.
 
-When EKS is integrated into the GitHub pipeline, set both repository Actions
-variables in the GitHub website; the workflows do not upload ignored local
-tfvars. Open the repository, then go to **Settings → Secrets and variables →
+Set or update both repository Actions variables in the GitHub website; the
+workflows do not upload ignored local tfvars. Verify the CIDR variable again
+immediately before an EKS deployment. Open the repository, then go to **Settings → Secrets and variables →
 Actions → Variables → New repository variable**. Add:
 
 | Name | Value |
 |---|---|
-| `EKS_ADMIN_PUBLIC_IPV4_CIDR` | `195.14.217.35/32` |
+| `EKS_ADMIN_PUBLIC_IPV4_CIDR` | Current administrator IPv4 `/32`; refresh before deploy |
 | `EKS_ADMIN_IAM_ROLE_ARN` | `arn:aws:iam::429496640190:role/healthops-dev-eks-admin` |
 
-These are configuration values, not AWS credentials. The workflows reject a
-partial pair and pass a complete pair through Terraform's input validation.
+These are configuration values, not AWS credentials. The workflows require a complete pair and pass it through Terraform's input
+validation. The manual apply workflow also requires the current CIDR to be
+confirmed when the plan creates or changes EKS.
 GitHub CLI (`gh`) is optional; it is not required to configure repository
 variables.
 
-For the future EKS root, merge the fragment from
-`infrastructure/terraform/modules/eks-admin-access/integration.tf.example`
-into the cluster resource and call the reusable
-`infrastructure/terraform/modules/eks-admin-access` module. In
-`aws_eks_cluster.vpc_config`, set private and public endpoint access to `true`,
-set `public_access_cidrs` to exactly
-`[var.eks_administrator.public_ipv4_cidr]`, and use the private subnet IDs.
-Enable EKS access entries with `authentication_mode = "API_AND_CONFIG_MAP"`.
-Attach the prepared control-plane security group to the cluster; attach only the
-prepared worker security group to worker network interfaces. Configure a
-separate node role with ECR pull-only permissions.
-
-Do not create EKS as part of this connectivity change. The existing plan/apply
-workflow remains the only deployment path. Review its plan for route/resource
-additions and ensure it contains no unexpected replacement or deletion before
-manual apply.
+The EKS module now implements the endpoint settings, access entry, IAM role
+references, managed node group and add-ons. The launch template attaches only
+the prepared worker SG; it does not rely on EKS automatically attaching its
+managed cluster SG to workers. Review the security-group communication table
+in [eks-deployment.md](eks-deployment.md). EKS itself remains undeployed until
+the bootstrap IAM changes and a reviewed dev apply are explicitly approved.
 
 ## Deploy and verify networking
 
@@ -283,18 +269,20 @@ aws eks describe-cluster --name $clusterName --region eu-central-1 --profile ai-
 
 aws sso login --profile ai-lab-admin
 aws sts get-caller-identity --profile ai-lab-admin
+aws configure set role_arn $administratorRoleArn --profile healthops-eks-admin
+aws configure set source_profile ai-lab-admin --profile healthops-eks-admin
 aws eks update-kubeconfig --name $clusterName --region eu-central-1 `
-  --profile ai-lab-admin --role-arn $administratorRoleArn
+  --profile healthops-eks-admin
 kubectl auth can-i get nodes
 kubectl wait --for=condition=Ready nodes --all --timeout=10m
 kubectl get nodes -o wide
 ```
 
-The SSO profile is the source identity; `--role-arn` tells kubeconfig to obtain
-its EKS token as the dedicated administrator role. Its trust is restricted to
+The SSO profile is the source identity; the role profile tells kubeconfig to
+obtain its EKS token as the dedicated administrator role. Its trust is restricted to
 the verified SSO role, whose existing `AdministratorAccess` permission allows
-`sts:AssumeRole`. Neither the target role nor the access entry exists until the
-bootstrap role and future EKS changes have been applied.
+`sts:AssumeRole`. The role exists; the access entry will exist only after the
+dev EKS plan is applied.
 
 To prove that a private node pulls an image, use an image digest reported by the
 ECR publishing workflow:
@@ -308,7 +296,7 @@ kubectl get pods --namespace healthops -o wide
 kubectl describe pods --namespace healthops
 ```
 
-This test starts one API container in the future EKS cluster. It does not expose
+This test starts one API container in the EKS cluster after deployment. It does not expose
 an application endpoint or deploy the mock-model service.
 
 ## Home IP changes and VPN migration
@@ -327,7 +315,7 @@ $currentIp = (Invoke-RestMethod -Uri "https://checkip.amazonaws.com").Trim()
 "$currentIp/32"
 ```
 
-Replace `195.14.217.35/32` with the displayed value in the GitHub variable
+Set the displayed value as the GitHub variable
 `EKS_ADMIN_PUBLIC_IPV4_CIDR` using the web UI above. Update
 `EKS_ADMIN_IAM_ROLE_ARN` only if the intended administrator role changes. For a
 local plan, instead update `eks_administrator.public_ipv4_cidr` in the ignored

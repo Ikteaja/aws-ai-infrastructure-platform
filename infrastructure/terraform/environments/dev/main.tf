@@ -80,3 +80,46 @@ module "ecr" {
     Component   = "container-registry"
   }
 }
+
+data "aws_iam_role" "eks_cluster" {
+  name = "healthops-dev-eks-cluster"
+}
+
+data "aws_iam_role" "eks_workers" {
+  name = "healthops-dev-eks-workers"
+}
+
+data "aws_iam_role" "eks_vpc_cni" {
+  name = "healthops-dev-eks-vpc-cni"
+}
+
+module "eks" {
+  source = "../../modules/eks"
+
+  name                            = "ai-platform-dev"
+  aws_account_id                  = var.aws_account_id
+  kubernetes_version              = var.eks_kubernetes_version
+  vpc_id                          = module.network.vpc_id
+  private_subnet_ids              = values(module.network.private_subnet_ids)
+  control_plane_security_group_id = module.network.eks_control_plane_security_group_id
+  worker_security_group_id        = module.network.eks_worker_security_group_id
+  cluster_role_arn                = data.aws_iam_role.eks_cluster.arn
+  worker_role_arn                 = data.aws_iam_role.eks_workers.arn
+  vpc_cni_role_arn                = data.aws_iam_role.eks_vpc_cni.arn
+  administrator_iam_role_arn      = var.eks_administrator.iam_role_arn
+  administrator_public_ipv4_cidr  = var.eks_administrator.public_ipv4_cidr
+  cpu_instance_type               = var.eks_cpu_instance_type
+  node_min_size                   = var.eks_node_min_size
+  node_desired_size               = var.eks_node_desired_size
+  node_max_size                   = var.eks_node_max_size
+  worker_disk_size_gib            = 30
+  cluster_log_retention_days      = 30
+
+  tags = {
+    Project     = "healthcare-operations-assistant"
+    Environment = "dev"
+    ManagedBy   = "Terraform"
+    Component   = "eks"
+    Owner       = "Ikteaja"
+  }
+}
