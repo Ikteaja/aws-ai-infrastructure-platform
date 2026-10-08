@@ -6,10 +6,11 @@ Pod Identity Agent and kube-proxy add-ons are present. The first dev apply
 stopped while creating the VPC CNI Pod Identity association. VPC CNI, CoreDNS,
 and the CPU node group are not present, so the cluster is not ready for
 application workloads. The missing create-association permission has since been added through
-bootstrap and verified. A subsequent apply exposed the need for scoped
-`eks:TagResource`/`eks:UntagResource` on the Pod Identity association ARN; the
-source policy now includes these actions, but that update still needs bootstrap
-apply. The dev apply has not succeeded.
+bootstrap and verified. Subsequent applies exposed the need for scoped
+`eks:TagResource`/`eks:UntagResource` on the Pod Identity association ARN and
+`iam:GetRole` on the VPC CNI role. The source policy now includes these
+permissions, but they still need bootstrap apply. The dev apply has not
+succeeded.
 
 For deployment commands, troubleshooting, and post-deployment acceptance
 checks, see [the EKS deployment guide](../../../../docs/eks-deployment.md).
@@ -225,8 +226,10 @@ The bootstrap roles are separate from the operator role:
 The apply policy grants the VPC CNI add-on's required Pod Identity association
 operations, scoped to this cluster and its association resources. The create
 and describe permissions were applied on 8 October 2026 and verified with IAM
-policy simulation. A later `eks:TagResource` denial means the newly added,
-scoped tagging and untagging actions still need to be applied through bootstrap.
+policy simulation. Later errors showed that association tagging and reading
+the VPC CNI IAM role are also required; the source policy now includes scoped
+`eks:TagResource`/`eks:UntagResource` and `iam:GetRole` on that named role.
+Apply these additions through bootstrap before retrying the dev deployment.
 The apply workflow validates the current administrator CIDR against both the
 saved plan and repository variable; it does not override inputs embedded in a
 Terraform saved plan.

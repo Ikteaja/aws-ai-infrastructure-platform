@@ -152,6 +152,12 @@
       }
     },
     {
+      "Sid": "ReadDevEksVpcCniRole",
+      "Effect": "Allow",
+      "Action": "iam:GetRole",
+      "Resource": "arn:aws:iam::429496640190:role/healthops-dev-eks-vpc-cni"
+    },
+    {
       "Sid": "CreateNamedDevLaunchTemplate",
       "Effect": "Allow",
       "Action": "ec2:CreateLaunchTemplate",
