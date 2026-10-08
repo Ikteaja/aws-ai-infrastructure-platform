@@ -137,6 +137,9 @@ role does not create or broadly administer IAM identities:
   `AmazonEKSWorkerNodePolicy` plus `AmazonEC2ContainerRegistryPullOnly`.
 - VPC CNI role trusts `pods.eks.amazonaws.com` for this account and this
   cluster only, and receives `AmazonEKS_CNI_Policy`.
+- The apply role can create, describe, list, and delete Pod Identity
+  associations for this cluster; permissions are limited to the cluster and
+  its Pod Identity association resources.
 - The plan role gets region- and resource-scoped EKS, launch-template, log-group
   and IAM role read access.
 - The apply role gets narrowly named EKS cluster/node-group/add-on/access-entry
@@ -264,7 +267,9 @@ bootstrap changes are deployed, and the dev plan has been reviewed.
 5. For CI deployment, use the protected manual Apply workflow with the
    successful `main` plan-run ID, type `apply-dev`, and enter the freshly
    verified CIDR in `confirmed_admin_public_ipv4_cidr`. The workflow refuses an
-   EKS create/update if the entered CIDR differs from the repository variable.
+   EKS create/update if the entered CIDR differs from either the repository
+   variable or the CIDR embedded in the saved plan. The apply workflow does not
+   override Terraform inputs already recorded in a saved plan.
    For local deployment, apply only the reviewed saved plan after independently
    checking that the CIDR in it is current:
 

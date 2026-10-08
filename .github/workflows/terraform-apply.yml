@@ -163,8 +163,9 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
 
-      # EKS is now part of the dev configuration; both values are required.
-      - name: Configure EKS administrator inputs
+      # Validate current repository inputs. Terraform variable values are
+      # already embedded in the saved plan and must not be overridden here.
+      - name: Validate EKS administrator configuration
         env:
           EKS_ADMIN_PUBLIC_IPV4_CIDR: ${{ vars.EKS_ADMIN_PUBLIC_IPV4_CIDR }}
           EKS_ADMIN_IAM_ROLE_ARN: ${{ vars.EKS_ADMIN_IAM_ROLE_ARN }}
@@ -173,12 +174,6 @@ jobs:
             echo "::error::Set both EKS_ADMIN_PUBLIC_IPV4_CIDR and EKS_ADMIN_IAM_ROLE_ARN repository variables."
             exit 1
           fi
-
-          administrator_json="$(jq -cn \
-            --arg cidr "$EKS_ADMIN_PUBLIC_IPV4_CIDR" \
-            --arg role "$EKS_ADMIN_IAM_ROLE_ARN" \
-            '{public_ipv4_cidr: $cidr, iam_role_arn: $role}')"
-          printf 'TF_VAR_eks_administrator=%s\n' "$administrator_json" >> "$GITHUB_ENV"
 
       # STEP 5: Obtain temporary credentials for the apply role.
       - name: Authenticate to AWS
@@ -201,15 +196,18 @@ jobs:
           CONFIRMED_ADMIN_CIDR: ${{ inputs.confirmed_admin_public_ipv4_cidr }}
           CONFIGURED_ADMIN_CIDR: ${{ vars.EKS_ADMIN_PUBLIC_IPV4_CIDR }}
         run: |
-          cluster_actions="$(terraform show -json "$GITHUB_WORKSPACE/plan-artifact/dev.tfplan" \
-            | jq -r '[.resource_changes[]? |
-              select(.address == "module.eks.aws_eks_cluster.this") |
-              .change.actions[]?] | unique | join(",")')"
+          plan_json="$(terraform show -json "$GITHUB_WORKSPACE/plan-artifact/dev.tfplan")"
+          cluster_actions="$(jq -r '[.resource_changes[]? |
+            select(.address == "module.eks.aws_eks_cluster.this") |
+            .change.actions[]?] | unique | join(",")' <<< "$plan_json")"
 
           if [[ "$cluster_actions" == *create* || "$cluster_actions" == *update* ]]; then
+            planned_admin_cidr="$(jq -r '.variables.eks_administrator.value.public_ipv4_cidr // empty' <<< "$plan_json")"
+
             if [[ -z "$CONFIRMED_ADMIN_CIDR" ||
-                  "$CONFIRMED_ADMIN_CIDR" != "$CONFIGURED_ADMIN_CIDR" ]]; then
-              echo "::error::This plan creates or updates EKS. Check your current public IPv4 /32, update EKS_ADMIN_PUBLIC_IPV4_CIDR if needed, generate a new plan, and enter the exact CIDR in confirmed_admin_public_ipv4_cidr."
+                  "$CONFIRMED_ADMIN_CIDR" != "$CONFIGURED_ADMIN_CIDR" ||
+                  "$CONFIRMED_ADMIN_CIDR" != "$planned_admin_cidr" ]]; then
+              echo "::error::This plan creates or updates EKS. The confirmed current CIDR must match both the saved plan and EKS_ADMIN_PUBLIC_IPV4_CIDR. If the address changed, update the repository variable and generate a new plan."
               exit 1
             fi
           fi

@@ -161,7 +161,7 @@ eks_administrator = {
 }
 ```
 
-The `195.14.217.35/32` value was supplied earlier and is historical; do not
+The `195.14.217.35` value was supplied earlier and is historical; do not
 assume it is still current. The role ARN is now an existing bootstrap-managed
 role. Bootstrap refresh confirmed the role is present, and its trust is
 configured for the verified SSO role:
@@ -184,7 +184,7 @@ Actions → Variables → New repository variable**. Add:
 
 | Name | Value |
 |---|---|
-| `EKS_ADMIN_PUBLIC_IPV4_CIDR` | Current administrator IPv4 `/32`; refresh before deploy |
+| `EKS_ADMIN_PUBLIC_IPV4_CIDR` | Current administrator IPv4 ``; refresh before deploy |
 | `EKS_ADMIN_IAM_ROLE_ARN` | `arn:aws:iam::429496640190:role/healthops-dev-eks-admin` |
 
 These are configuration values, not AWS credentials. The workflows require a complete pair and pass it through Terraform's input
