@@ -250,12 +250,13 @@ reviewed bootstrap apply updated the plan/apply policies in place (two policies
 changed; no resources added or destroyed). IAM simulation confirmed the apply
 role is allowed to create the association for this cluster. Subsequent applies
 exposed missing `eks:TagResource` permission on the association ARN and
-`iam:GetRole` on the VPC CNI role. The versioned apply policy now includes
-scoped `eks:TagResource`/`eks:UntagResource` and `iam:GetRole` only for
-`healthops-dev-eks-vpc-cni`. These changes need a reviewed bootstrap apply;
-expect an in-place update to the EKS apply managed policy. After applying it,
-generate and review a fresh dev plan before retrying. Dev planning reads the
-three service roles by name.
+`iam:GetRole` for the VPC CNI role and, later, the worker role. The versioned
+apply policy now includes scoped `eks:TagResource`/`eks:UntagResource` and
+`iam:GetRole` only for the three named EKS service roles (cluster, workers,
+and VPC CNI). These changes need a reviewed bootstrap apply; expect an in-place
+update to the EKS apply managed policy. After applying it, generate and review
+a fresh dev plan before retrying. Dev planning reads the three service roles
+by name.
 See [IAM policy map](IAM-POLICY-MAP.md).
 
 GitHub repository Actions variables required by the plan and apply workflows:
