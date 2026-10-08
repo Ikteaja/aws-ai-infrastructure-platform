@@ -130,6 +130,12 @@ The bootstrap roles are separate from the operator role:
 | Terraform plan role | GitHub plan job | Read-only EKS planning policy plus existing read policies. |
 | Terraform apply role | GitHub apply job | Scoped resource-management policy and `iam:PassRole` for only the EKS service roles. |
 
+The apply policy also grants the VPC CNI add-on's required Pod Identity
+association operations, scoped to this cluster and its association resources.
+The apply workflow validates the current administrator CIDR against both the
+saved plan and the repository variable; it does not override inputs embedded
+in a Terraform saved plan.
+
 The `healthops-dev-eks-admin` role trust must remain limited to the verified
 AWS IAM Identity Center administrator role. Do not replace its SSO principal
 with a guessed or newly named role ARN.
