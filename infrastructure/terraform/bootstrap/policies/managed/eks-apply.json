@@ -154,7 +154,10 @@
     {
       "Sid": "ReadDevEksServiceRoles",
       "Effect": "Allow",
-      "Action": "iam:GetRole",
+      "Action": [
+        "iam:GetRole",
+        "iam:ListAttachedRolePolicies"
+      ],
       "Resource": [
         "arn:aws:iam::429496640190:role/healthops-dev-eks-cluster",
         "arn:aws:iam::429496640190:role/healthops-dev-eks-workers",

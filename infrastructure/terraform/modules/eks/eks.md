@@ -8,9 +8,10 @@ and the CPU node group are not present, so the cluster is not ready for
 application workloads. The missing create-association permission has since been added through
 bootstrap and verified. Subsequent applies exposed the need for scoped
 `eks:TagResource`/`eks:UntagResource` on the Pod Identity association ARN and
-`iam:GetRole` on the VPC CNI and worker roles. The source policy now includes
-these permissions, with `iam:GetRole` limited to the three EKS service roles,
-but they still need bootstrap apply. The dev apply has not succeeded.
+`iam:GetRole` on the VPC CNI and worker roles. A later node-group attempt also
+requires `iam:ListAttachedRolePolicies`. The source policy includes these
+permissions, scoped to the three EKS service roles, but the latest update still
+needs bootstrap apply. The dev apply has not succeeded.
 
 For deployment commands, troubleshooting, and post-deployment acceptance
 checks, see [the EKS deployment guide](../../../../docs/eks-deployment.md).
@@ -226,11 +227,12 @@ The bootstrap roles are separate from the operator role:
 The apply policy grants the VPC CNI add-on's required Pod Identity association
 operations, scoped to this cluster and its association resources. The create
 and describe permissions were applied on 8 October 2026 and verified with IAM
-policy simulation. Later errors showed that association tagging and reading
-the VPC CNI and worker IAM roles are also required; the source policy now
-includes scoped `eks:TagResource`/`eks:UntagResource` and `iam:GetRole` on the
-three named EKS service roles. Apply these additions through bootstrap before
-retrying the dev deployment.
+policy simulation. Later errors showed that association tagging, reading role
+metadata, and listing attached role policies are also required; the source
+policy includes scoped `eks:TagResource`/`eks:UntagResource`,
+`iam:GetRole`, and `iam:ListAttachedRolePolicies` on the three named EKS
+service roles. Apply the latest additions through bootstrap before retrying
+the dev deployment.
 The apply workflow validates the current administrator CIDR against both the
 saved plan and repository variable; it does not override inputs embedded in a
 Terraform saved plan.

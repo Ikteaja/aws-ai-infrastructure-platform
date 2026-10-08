@@ -1,5 +1,8 @@
 # IAM ownership, policy map and operating procedure
 
+For the EKS-specific IAM error history and recovery steps, see the
+[EKS Terraform troubleshooting knowledge base](knowledge-base/eks-terraform-deployment-troubleshooting.md).
+
 Account: `429496640190`. Region: `eu-central-1`. Inventory captured on 2026-10-03 using the `ai-lab-admin` SSO profile. The project builds secure document-based AI services; deployment access is separate from application and AWS service identities.
 
 ## Ownership boundaries
@@ -57,12 +60,15 @@ in place to add scoped EKS Pod Identity association permissions (2 changed,
 VPC CNI association for `ai-platform-dev`. A subsequent apply exposed the
 need for `eks:TagResource` on the association ARN. Later add-on and node-group
 attempts reported missing `iam:GetRole` for the VPC CNI and worker roles. The
-versioned apply policy now includes scoped `eks:TagResource`/`eks:UntagResource`
-and `iam:GetRole` only for the three named EKS service roles (cluster, workers,
-and VPC CNI); these additions still need to be planned, reviewed, and applied.
-The cluster is `ACTIVE`; the Pod Identity Agent and kube-proxy are present, but
-VPC CNI, CoreDNS, and the managed node group are still absent. Create and
-review a fresh dev plan after the bootstrap policy update.
+later managed node-group attempt reported missing
+`iam:ListAttachedRolePolicies` for the worker role. The versioned apply policy
+now includes scoped `eks:TagResource`/`eks:UntagResource` and
+`iam:GetRole`/`iam:ListAttachedRolePolicies` only for the three named EKS
+service roles (cluster, workers, and VPC CNI); the latest addition still needs
+to be planned, reviewed, and applied. The cluster is `ACTIVE`; the Pod Identity
+Agent and kube-proxy are present, but VPC CNI, CoreDNS, and the managed node
+group are still absent. Create and review a fresh dev plan after the bootstrap
+policy update.
 
 The ECR plan/apply policies and image-publisher role are declared in bootstrap
 Terraform. The EKS policy and service-role changes above are applied; other
