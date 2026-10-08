@@ -71,7 +71,9 @@
       "Action": [
         "eks:CreatePodIdentityAssociation",
         "eks:DeletePodIdentityAssociation",
-        "eks:DescribePodIdentityAssociation"
+        "eks:DescribePodIdentityAssociation",
+        "eks:TagResource",
+        "eks:UntagResource"
       ],
       "Resource": [
         "arn:aws:eks:eu-central-1:429496640190:cluster/ai-platform-dev",
