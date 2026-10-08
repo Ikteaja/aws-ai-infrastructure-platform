@@ -1,5 +1,8 @@
 # HealthOps EKS dev deployment
 
+For the chronological IAM failure log and bootstrap-to-dev recovery workflow,
+see the [EKS Terraform troubleshooting knowledge base](knowledge-base/eks-terraform-deployment-troubleshooting.md).
+
 **Status as of 8 October 2026:** The EKS cluster reports `ACTIVE`. A partial
 apply created the cluster and some supporting resources, but the managed node
 group and VPC CNI/CoreDNS add-ons are not present. The cluster is not ready for
@@ -252,11 +255,12 @@ role is allowed to create the association for this cluster. Subsequent applies
 exposed missing `eks:TagResource` permission on the association ARN and
 `iam:GetRole` for the VPC CNI role and, later, the worker role. The versioned
 apply policy now includes scoped `eks:TagResource`/`eks:UntagResource` and
-`iam:GetRole` only for the three named EKS service roles (cluster, workers,
-and VPC CNI). These changes need a reviewed bootstrap apply; expect an in-place
-update to the EKS apply managed policy. After applying it, generate and review
-a fresh dev plan before retrying. Dev planning reads the three service roles
-by name.
+`iam:GetRole` and `iam:ListAttachedRolePolicies` only for the three named EKS
+service roles (cluster, workers, and VPC CNI). The latest
+`ListAttachedRolePolicies` addition and any earlier source changes not yet
+applied need a reviewed bootstrap apply; expect an in-place update to the EKS
+apply managed policy. After applying it, generate and review a fresh dev plan
+before retrying. Dev planning reads the three service roles by name.
 See [IAM policy map](IAM-POLICY-MAP.md).
 
 GitHub repository Actions variables required by the plan and apply workflows:
