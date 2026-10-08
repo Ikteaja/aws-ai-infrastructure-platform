@@ -51,6 +51,14 @@ addresses and import IDs: [iam-resource-map.json](iam-resource-map.json).
 Point-in-time IAM evidence: [iam-adoption-baseline.json](iam-adoption-baseline.json);
 it contains no credentials.
 
+On 2026-10-08, a reviewed bootstrap apply updated the EKS plan/apply policies
+in place to add scoped EKS Pod Identity association permissions (2 changed,
+0 added, 0 destroyed). IAM simulation confirmed the apply role can create the
+VPC CNI association for `ai-platform-dev`. The cluster is `ACTIVE`; the
+Pod Identity Agent and kube-proxy are present, but VPC CNI, CoreDNS, and the
+managed node group are still absent after the failed dev apply. Create and
+review a fresh dev plan before retrying it.
+
 The ECR plan/apply policies and image-publisher role are declared in bootstrap
 Terraform. The EKS policy and service-role changes above are applied; other
 bootstrap changes must be checked against their actual live state before
