@@ -248,9 +248,13 @@ attempt failed because the apply policy did not allow
 `eks:CreatePodIdentityAssociation` for the VPC CNI add-on. On 8 October, a
 reviewed bootstrap apply updated the plan/apply policies in place (two policies
 changed; no resources added or destroyed). IAM simulation confirmed the apply
-role is now allowed to create the association for this cluster. The failed dev
-apply was not automatically retried; generate and review a fresh dev plan
-before retrying. Dev planning reads the three service roles by name.
+role is allowed to create the association for this cluster. A subsequent apply
+also exposed missing `eks:TagResource` permission on the association ARN. The
+versioned apply policy now includes scoped `eks:TagResource` and
+`eks:UntagResource`; this additional change still needs a reviewed bootstrap
+apply. Expect only an in-place update to the EKS apply managed policy. After
+applying it, generate and review a fresh dev plan before retrying. Dev planning
+reads the three service roles by name.
 See [IAM policy map](IAM-POLICY-MAP.md).
 
 GitHub repository Actions variables required by the plan and apply workflows:

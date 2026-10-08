@@ -5,8 +5,11 @@ scoped plan/apply policies. The `ai-platform-dev` cluster is `ACTIVE`; the
 Pod Identity Agent and kube-proxy add-ons are present. The first dev apply
 stopped while creating the VPC CNI Pod Identity association. VPC CNI, CoreDNS,
 and the CPU node group are not present, so the cluster is not ready for
-application workloads. The missing apply-role permission has since been added
-through bootstrap and verified, but the dev apply has not been retried.
+application workloads. The missing create-association permission has since been added through
+bootstrap and verified. A subsequent apply exposed the need for scoped
+`eks:TagResource`/`eks:UntagResource` on the Pod Identity association ARN; the
+source policy now includes these actions, but that update still needs bootstrap
+apply. The dev apply has not succeeded.
 
 For deployment commands, troubleshooting, and post-deployment acceptance
 checks, see [the EKS deployment guide](../../../../docs/eks-deployment.md).
@@ -219,12 +222,14 @@ The bootstrap roles are separate from the operator role:
 | Terraform plan role | GitHub plan job | Read-only EKS planning policy plus existing read policies. |
 | Terraform apply role | GitHub apply job | Scoped resource-management policy and `iam:PassRole` for only the EKS service roles. |
 
-The apply policy now grants the VPC CNI add-on's required Pod Identity
-association operations, scoped to this cluster and its association resources.
-This policy update was applied on 8 October 2026 and verified with IAM policy
-simulation. The apply workflow validates the current administrator CIDR
-against both the saved plan and repository variable; it does not override
-inputs embedded in a Terraform saved plan.
+The apply policy grants the VPC CNI add-on's required Pod Identity association
+operations, scoped to this cluster and its association resources. The create
+and describe permissions were applied on 8 October 2026 and verified with IAM
+policy simulation. A later `eks:TagResource` denial means the newly added,
+scoped tagging and untagging actions still need to be applied through bootstrap.
+The apply workflow validates the current administrator CIDR against both the
+saved plan and repository variable; it does not override inputs embedded in a
+Terraform saved plan.
 
 The `healthops-dev-eks-admin` role trust must remain limited to the verified
 AWS IAM Identity Center administrator role. Do not replace its SSO principal
