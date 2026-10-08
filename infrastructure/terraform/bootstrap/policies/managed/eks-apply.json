@@ -152,10 +152,14 @@
       }
     },
     {
-      "Sid": "ReadDevEksVpcCniRole",
+      "Sid": "ReadDevEksServiceRoles",
       "Effect": "Allow",
       "Action": "iam:GetRole",
-      "Resource": "arn:aws:iam::429496640190:role/healthops-dev-eks-vpc-cni"
+      "Resource": [
+        "arn:aws:iam::429496640190:role/healthops-dev-eks-cluster",
+        "arn:aws:iam::429496640190:role/healthops-dev-eks-workers",
+        "arn:aws:iam::429496640190:role/healthops-dev-eks-vpc-cni"
+      ]
     },
     {
       "Sid": "CreateNamedDevLaunchTemplate",

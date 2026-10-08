@@ -55,14 +55,14 @@ On 2026-10-08, a reviewed bootstrap apply updated the EKS plan/apply policies
 in place to add scoped EKS Pod Identity association permissions (2 changed,
 0 added, 0 destroyed). IAM simulation confirmed the apply role can create the
 VPC CNI association for `ai-platform-dev`. A subsequent apply exposed the
-need for `eks:TagResource` on the association ARN. The latest VPC CNI add-on
-attempt also reported missing `iam:GetRole` for the add-on role. The versioned
-apply policy now includes scoped `eks:TagResource`/`eks:UntagResource` and
-`iam:GetRole` only for `healthops-dev-eks-vpc-cni`; these additions still need
-to be planned, reviewed, and applied. The cluster is `ACTIVE`; the Pod Identity
-Agent and kube-proxy are present, but VPC CNI, CoreDNS, and the managed node
-group are still absent. Create and review a fresh dev plan after the bootstrap
-policy update.
+need for `eks:TagResource` on the association ARN. Later add-on and node-group
+attempts reported missing `iam:GetRole` for the VPC CNI and worker roles. The
+versioned apply policy now includes scoped `eks:TagResource`/`eks:UntagResource`
+and `iam:GetRole` only for the three named EKS service roles (cluster, workers,
+and VPC CNI); these additions still need to be planned, reviewed, and applied.
+The cluster is `ACTIVE`; the Pod Identity Agent and kube-proxy are present, but
+VPC CNI, CoreDNS, and the managed node group are still absent. Create and
+review a fresh dev plan after the bootstrap policy update.
 
 The ECR plan/apply policies and image-publisher role are declared in bootstrap
 Terraform. The EKS policy and service-role changes above are applied; other
