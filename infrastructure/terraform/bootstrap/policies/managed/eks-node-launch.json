@@ -20,6 +20,21 @@
       }
     },
     {
+      "Sid": "UseNamedDevEksCpuLaunchTemplate",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": "arn:aws:ec2:eu-central-1:429496640190:launch-template/lt-0d2dcb9b40ef159b8",
+      "Condition": {
+        "StringEquals": {
+          "ec2:LaunchTemplate": "arn:aws:ec2:eu-central-1:429496640190:launch-template/lt-0d2dcb9b40ef159b8",
+          "aws:ResourceTag/Name": "ai-platform-dev-cpu",
+          "aws:ResourceTag/Project": "healthcare-operations-assistant",
+          "aws:ResourceTag/Environment": "dev",
+          "aws:ResourceTag/ManagedBy": "Terraform"
+        }
+      }
+    },
+    {
       "Sid": "TagDevEksCpuInstancesAndVolumesOnLaunch",
       "Effect": "Allow",
       "Action": "ec2:CreateTags",

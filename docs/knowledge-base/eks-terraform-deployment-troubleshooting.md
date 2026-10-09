@@ -8,12 +8,12 @@ deployment.
 ## Current state and important distinction
 
 The latest reported deployment passed the earlier EKS role-read checks and
-reached EC2 instance launch for the managed node group. The complete
-923-character authorization message was decoded successfully. It reports
-`allowed: false`, `explicitDeny: false`, no matched statements, action
-`RunInstances`, and resource `arn:aws:ec2:eu-central-1:429496640190:instance/*`
-for the `healthops-dev-terraform-apply` role. This is a missing identity-based
-allow, not an explicit deny or a Terraform syntax problem.
+reached EC2 instance launch for the managed node group. The complete latest
+authorization message reports `allowed: false`, `explicitDeny: false`, no
+matched statements, action `RunInstances`, and resource
+`arn:aws:ec2:eu-central-1:429496640190:launch-template/lt-0d2dcb9b40ef159b8`
+for the `healthops-dev-terraform-apply` role. This is a missing matching
+identity-based allow, not an explicit deny or a Terraform syntax problem.
 
 The EC2 launch permissions are kept in a separate managed policy because AWS
 limits each managed policy document to 6,144 non-whitespace characters. The
@@ -26,10 +26,15 @@ condition could never match and the role remained denied. The VPC restriction
 is instead enforced through the named launch template and its configured
 private network interface/security group. The policy also allows
 creation-time tags only for the expected worker instances and volumes. The
-corrected policy has been applied as managed policy version `v2`, and IAM
-simulation of the decoded launch request now returns `allowed`. If the launch
-template or worker instance type is replaced, update the matching policy
-condition to the new value before deploying again.
+instance-resource allow was applied as managed policy version `v2` and
+simulated as allowed. A subsequent retry exposed the separate launch-template
+resource authorization check: instance-type and metadata conditions are not
+present in that resource's authorization context. A separate allow for only
+the exact launch-template ARN and its identifying tags was applied as managed
+policy version `v3`. Simulations for both the instance and launch-template
+authorization contexts now return `allowed`. If the launch template or worker
+instance type is replaced, update the matching policy condition before
+deploying again.
 
 The bootstrap policy source grants `iam:GetRole` and
 `iam:ListAttachedRolePolicies` on the three named EKS service roles only:
@@ -63,7 +68,7 @@ applies can leave some resources successfully created.
 | VPC CNI add-on: `iam:GetRole` denied | EKS needs to read the IAM role configured for the add-on, `healthops-dev-eks-vpc-cni`. | Add narrowly scoped `iam:GetRole`. The deployment later advanced beyond this error; confirm the live policy if it recurs. |
 | Managed node group: `iam:GetRole` denied for `healthops-dev-eks-workers` | EKS needs to inspect the node group's worker role. The previous `GetRole` grant covered only the CNI role. | Expand the source policy's `iam:GetRole` resource list to the three named EKS service roles. The source is updated; apply it through bootstrap before retrying. |
 | Managed node group: `iam:ListAttachedRolePolicies` denied for `healthops-dev-eks-workers` | EKS checks which AWS-managed policies are attached to the node role during node-group validation. `iam:GetRole` alone does not allow this separate IAM API operation. | Add `iam:ListAttachedRolePolicies`, alongside `iam:GetRole`, scoped to the three named EKS service roles. This latest addition is source-only until a reviewed bootstrap plan is applied. |
-| Managed node group: `You are not authorized to launch instances with this launch template` | The decoded authorization context identifies missing `ec2:RunInstances` permission on `instance/*` for the Terraform apply role. The first launch policy also required `ec2:Vpc`, which the request context did not provide. | Remove the unsatisfied `ec2:Vpc` condition while retaining launch-template-, type-, IMDS-, and region constraints; keep creation-time instance/volume tagging scoped to expected tags. The corrected separate `eks-node-launch` policy is applied, and simulation of the decoded request now returns allowed. Retry the deployment with a fresh plan. |
+| Managed node group: `You are not authorized to launch instances with this launch template` | The generic text recurred, but the decoded resource changed: `ec2:RunInstances` was denied on the launch-template ARN itself. EC2 evaluates `RunInstances` authorization against multiple resource types; instance-type and metadata conditions are unavailable in the launch-template resource context. | Retain the instance-scoped allow, and add a separate `ec2:RunInstances` allow on the exact launch-template ARN, conditioned on its identifying tags. This is now applied as managed policy version `v3`, and both instance and launch-template simulations return allowed. Retry with a fresh deployment plan. |
 | Applying a saved bootstrap plan: `Saved plan is stale` | Bootstrap state changed after that plan was generated; Terraform refuses to apply an outdated snapshot. | Generate a new plan from the latest state, inspect it, then apply that exact fresh plan. Never try to reuse the stale plan. |
 | Saved-plan warning: `Ignoring variable when applying a saved plan` | The apply command or workflow supplied a variable that differed from the value already embedded in the saved plan. | Do not override Terraform variables at saved-plan apply time. Change inputs and create a new plan instead. The workflow should apply the exact reviewed artifact. |
 
@@ -107,10 +112,11 @@ than retrying the decode. Do not pipe an empty or failed decode result into
 Inspect the decoded `explicitDeny`, `matchedStatements`, `failures`,
 `context.action`, `context.resource`, and principal details. The result for the
 latest failure identified `ec2:RunInstances` on `instance/*` for the Terraform
-apply role; the allow is in the separate `eks-node-launch` policy. Its first
-version included an unsatisfied `ec2:Vpc` condition. Version `v2` removed that
-condition, was applied, and passed IAM simulation for the decoded request.
-Retry the EKS deployment with a fresh plan. Do not paste account-sensitive
+apply role. The previous denial was on `instance/*`; this denial is on the
+launch-template resource itself. The `eks-node-launch` policy now has separate
+allows for those resource authorization contexts. Managed policy version `v3`
+is applied, and both matching contexts have been simulated as allowed. Retry
+the EKS deployment with a fresh plan. Do not paste account-sensitive
 authorization details into a public issue.
 
 ## Permission and responsibility map
