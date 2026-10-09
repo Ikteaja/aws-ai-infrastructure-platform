@@ -35,6 +35,26 @@
       }
     },
     {
+      "Sid": "CreateDevEksCpuNetworkInterfaces",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": "arn:aws:ec2:eu-central-1:429496640190:network-interface/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1",
+          "ec2:Vpc": "arn:aws:ec2:eu-central-1:429496640190:vpc/vpc-0213b3c62cb94e86d",
+          "ec2:Subnet": [
+            "arn:aws:ec2:eu-central-1:429496640190:subnet/subnet-0a520b845174e472e",
+            "arn:aws:ec2:eu-central-1:429496640190:subnet/subnet-097a6504a725de799"
+          ],
+          "ec2:LaunchTemplate": "arn:aws:ec2:eu-central-1:429496640190:launch-template/lt-0d2dcb9b40ef159b8"
+        },
+        "Bool": {
+          "ec2:AssociatePublicIpAddress": false
+        }
+      }
+    },
+    {
       "Sid": "TagDevEksCpuInstancesAndVolumesOnLaunch",
       "Effect": "Allow",
       "Action": "ec2:CreateTags",

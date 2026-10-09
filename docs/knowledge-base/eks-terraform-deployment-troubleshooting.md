@@ -29,12 +29,14 @@ creation-time tags only for the expected worker instances and volumes. The
 instance-resource allow was applied as managed policy version `v2` and
 simulated as allowed. A subsequent retry exposed the separate launch-template
 resource authorization check: instance-type and metadata conditions are not
-present in that resource's authorization context. A separate allow for only
-the exact launch-template ARN and its identifying tags was applied as managed
-policy version `v3`. Simulations for both the instance and launch-template
-authorization contexts now return `allowed`. If the launch template or worker
-instance type is replaced, update the matching policy condition before
-deploying again.
+present in that resource's authorization context. A separate allow for only the exact launch-template
+ARN and its identifying tags was applied as managed policy version `v3`. The
+next attempt exposed the `network-interface/*` resource check. Its allow is
+constrained to the two private EKS subnets, their VPC, the exact launch
+template, and no public IP. This ENI permission is applied in managed policy
+version `v4`, and simulation of the decoded request returns `allowed`. If the
+launch template, subnets, VPC, or worker instance type is replaced, update the
+matching policy conditions before deploying again.
 
 The bootstrap policy source grants `iam:GetRole` and
 `iam:ListAttachedRolePolicies` on the three named EKS service roles only:
@@ -68,7 +70,7 @@ applies can leave some resources successfully created.
 | VPC CNI add-on: `iam:GetRole` denied | EKS needs to read the IAM role configured for the add-on, `healthops-dev-eks-vpc-cni`. | Add narrowly scoped `iam:GetRole`. The deployment later advanced beyond this error; confirm the live policy if it recurs. |
 | Managed node group: `iam:GetRole` denied for `healthops-dev-eks-workers` | EKS needs to inspect the node group's worker role. The previous `GetRole` grant covered only the CNI role. | Expand the source policy's `iam:GetRole` resource list to the three named EKS service roles. The source is updated; apply it through bootstrap before retrying. |
 | Managed node group: `iam:ListAttachedRolePolicies` denied for `healthops-dev-eks-workers` | EKS checks which AWS-managed policies are attached to the node role during node-group validation. `iam:GetRole` alone does not allow this separate IAM API operation. | Add `iam:ListAttachedRolePolicies`, alongside `iam:GetRole`, scoped to the three named EKS service roles. This latest addition is source-only until a reviewed bootstrap plan is applied. |
-| Managed node group: `You are not authorized to launch instances with this launch template` | The generic text recurred, but the decoded resource changed: `ec2:RunInstances` was denied on the launch-template ARN itself. EC2 evaluates `RunInstances` authorization against multiple resource types; instance-type and metadata conditions are unavailable in the launch-template resource context. | Retain the instance-scoped allow, and add a separate `ec2:RunInstances` allow on the exact launch-template ARN, conditioned on its identifying tags. This is now applied as managed policy version `v3`, and both instance and launch-template simulations return allowed. Retry with a fresh deployment plan. |
+| Managed node group: `You are not authorized to launch instances with this launch template` | The generic message has exposed sequential resource checks: first `instance/*`, then the exact launch-template ARN, and most recently `network-interface/*`. | Keep separate `ec2:RunInstances` allows for each resource context. The instance and launch-template permissions are active in version `v3`; the ENI allow limited to the two private EKS subnets, their VPC, the exact launch template, and `AssociatePublicIpAddress=false` is now active in version `v4`. Its decoded request simulation returns allowed. Retry with a fresh deployment plan. |
 | Applying a saved bootstrap plan: `Saved plan is stale` | Bootstrap state changed after that plan was generated; Terraform refuses to apply an outdated snapshot. | Generate a new plan from the latest state, inspect it, then apply that exact fresh plan. Never try to reuse the stale plan. |
 | Saved-plan warning: `Ignoring variable when applying a saved plan` | The apply command or workflow supplied a variable that differed from the value already embedded in the saved plan. | Do not override Terraform variables at saved-plan apply time. Change inputs and create a new plan instead. The workflow should apply the exact reviewed artifact. |
 
@@ -112,12 +114,11 @@ than retrying the decode. Do not pipe an empty or failed decode result into
 Inspect the decoded `explicitDeny`, `matchedStatements`, `failures`,
 `context.action`, `context.resource`, and principal details. The result for the
 latest failure identified `ec2:RunInstances` on `instance/*` for the Terraform
-apply role. The previous denial was on `instance/*`; this denial is on the
-launch-template resource itself. The `eks-node-launch` policy now has separate
-allows for those resource authorization contexts. Managed policy version `v3`
-is applied, and both matching contexts have been simulated as allowed. Retry
-the EKS deployment with a fresh plan. Do not paste account-sensitive
-authorization details into a public issue.
+apply role. The sequence of denied resources is `instance/*`, the specific
+launch template, then `network-interface/*`. Each now has its own scoped allow
+in active policy version `v4`. IAM simulation for the decoded ENI request
+returns allowed. Retry the EKS deployment with a fresh plan. Do not paste
+account-sensitive authorization details into a public issue.
 
 ## Permission and responsibility map
 
