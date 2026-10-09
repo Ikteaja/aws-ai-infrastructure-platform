@@ -10,6 +10,12 @@ application workloads. Networking and DNS flows below describe the intended
 configuration after those components are deployed. This guide distinguishes
 live resources from remaining configuration; no destroy has been run.
 
+The latest node-group attempt reached instance launch but failed with an
+encoded launch-template authorization error. The excerpt did not include a
+complete encoded message, so the exact denied EC2 action/resource remains
+unknown. Decode the full message before changing EC2 permissions; see the
+[EKS troubleshooting knowledge base](knowledge-base/eks-terraform-deployment-troubleshooting.md#decode-the-launch-template-authorization-failure).
+
 ## Architecture
 
 ```mermaid

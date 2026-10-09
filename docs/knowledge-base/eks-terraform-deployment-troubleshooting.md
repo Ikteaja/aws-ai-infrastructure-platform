@@ -7,11 +7,17 @@ deployment.
 
 ## Current state and important distinction
 
-The latest reported deployment reached EKS managed node-group creation and
-then failed because the GitHub Terraform apply role lacked
-`iam:ListAttachedRolePolicies` on `healthops-dev-eks-workers`. The bootstrap
-policy source now grants `iam:GetRole` and `iam:ListAttachedRolePolicies` on
-the three named EKS service roles only:
+The latest reported deployment passed the earlier EKS role-read checks and
+reached EC2 instance launch for the managed node group. It failed with
+`You are not authorized to launch instances with this launch template` and an
+encoded authorization failure. The token pasted for decoding was truncated:
+the Actions log contains a 923-character token, but the pasted value stopped
+early. The exact denied action/resource has therefore not yet been decoded.
+Do not add `ec2:*` or assume the missing action is `ec2:RunInstances` without
+decoding the complete message first.
+
+The bootstrap policy source grants `iam:GetRole` and
+`iam:ListAttachedRolePolicies` on the three named EKS service roles only:
 
 - `healthops-dev-eks-cluster`
 - `healthops-dev-eks-workers`
@@ -19,10 +25,10 @@ the three named EKS service roles only:
 
 The source file is
 [`eks-apply.json`](../../infrastructure/terraform/bootstrap/policies/managed/eks-apply.json).
-The latest worker-role permission change has **not been confirmed as applied
-in AWS**. A source change is not an AWS permission change until a reviewed
-bootstrap Terraform plan has been applied. Check the live policy or a fresh
-bootstrap plan before assuming it is active.
+The latest worker-role and role-policy-list permission changes have **not been
+confirmed as applied in AWS**. A source change is not an AWS permission change
+until a reviewed bootstrap Terraform plan has been applied. Check the live
+policy or a fresh bootstrap plan before assuming it is active.
 
 The cluster was last reported as `ACTIVE`, with the Pod Identity Agent and
 `kube-proxy` present. VPC CNI, CoreDNS, and the managed node group were not
@@ -40,6 +46,7 @@ applies can leave some resources successfully created.
 | VPC CNI add-on: `iam:GetRole` denied | EKS needs to read the IAM role configured for the add-on, `healthops-dev-eks-vpc-cni`. | Add narrowly scoped `iam:GetRole`. The deployment later advanced beyond this error; confirm the live policy if it recurs. |
 | Managed node group: `iam:GetRole` denied for `healthops-dev-eks-workers` | EKS needs to inspect the node group's worker role. The previous `GetRole` grant covered only the CNI role. | Expand the source policy's `iam:GetRole` resource list to the three named EKS service roles. The source is updated; apply it through bootstrap before retrying. |
 | Managed node group: `iam:ListAttachedRolePolicies` denied for `healthops-dev-eks-workers` | EKS checks which AWS-managed policies are attached to the node role during node-group validation. `iam:GetRole` alone does not allow this separate IAM API operation. | Add `iam:ListAttachedRolePolicies`, alongside `iam:GetRole`, scoped to the three named EKS service roles. This latest addition is source-only until a reviewed bootstrap plan is applied. |
+| Managed node group: `You are not authorized to launch instances with this launch template` | The node-group request reached instance launch but AWS denied authorization involving the launch template. The short error excerpt does not identify which EC2 action/resource failed; the encoded authorization message is needed. | Decode the complete encoded message using an authorized administrator profile. Do not add a broad EC2 grant. No fix is confirmed until the exact denied action and resource are known. |
 | Applying a saved bootstrap plan: `Saved plan is stale` | Bootstrap state changed after that plan was generated; Terraform refuses to apply an outdated snapshot. | Generate a new plan from the latest state, inspect it, then apply that exact fresh plan. Never try to reuse the stale plan. |
 | Saved-plan warning: `Ignoring variable when applying a saved plan` | The apply command or workflow supplied a variable that differed from the value already embedded in the saved plan. | Do not override Terraform variables at saved-plan apply time. Change inputs and create a new plan instead. The workflow should apply the exact reviewed artifact. |
 
@@ -48,6 +55,45 @@ let the operation progress far enough to expose the next missing action. For
 each new error, identify the exact principal, action, resource ARN, and
 Terraform operation. Add only the smallest required permission to the
 responsible policy, then review and apply the bootstrap change.
+
+### Decode the launch-template authorization failure
+
+Copy the **entire** value following `Encoded authorization failure message:`
+from the full GitHub Actions log. In the latest run, the token was 923
+characters and ended with `CVv1X7xO3X7mEJFfaoVd5zfI`; the shorter value pasted
+into PowerShell ended at `...mZS` and is invalid. Confirm the copied value
+before decoding:
+
+```powershell
+$encodedMessage = '<paste the complete encoded message from the Actions log>'
+$encodedMessage = $encodedMessage.Trim()
+Write-Output "Length: $($encodedMessage.Length)"
+Write-Output "Expected suffix present: $($encodedMessage.EndsWith('CVv1X7xO3X7mEJFfaoVd5zfI'))"
+$decodedMessage = $null
+$decodedMessage = aws sts decode-authorization-message `
+  --encoded-message $encodedMessage `
+  --profile ai-lab-admin `
+  --query DecodedMessage `
+  --output text
+
+if ($LASTEXITCODE -ne 0) {
+  throw 'Decode failed. Read the AWS CLI error above; verify the token is complete and the profile can call sts:DecodeAuthorizationMessage.'
+}
+
+$decodedMessage | ConvertFrom-Json | Format-List *
+```
+
+Run the decode command and its `$LASTEXITCODE` check together, in that order.
+PowerShell preserves `$LASTEXITCODE` from the most recent native executable:
+running only the `if` block later can report an earlier AWS CLI failure rather
+than retrying the decode. Do not pipe an empty or failed decode result into
+`ConvertFrom-Json`.
+
+Inspect the decoded `explicitDeny`, `matchedStatements`, `failures`,
+`context.action`, `context.resource`, and principal details. The output should
+identify the actual denied operation (for example, an EC2 launch or tag action)
+and relevant resource. Only then update the least-privilege bootstrap policy.
+Do not paste account-sensitive authorization details into a public issue.
 
 ## Permission and responsibility map
 
