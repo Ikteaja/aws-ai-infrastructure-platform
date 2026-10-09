@@ -12,8 +12,7 @@
           "ec2:LaunchTemplate": "arn:aws:ec2:eu-central-1:429496640190:launch-template/lt-0d2dcb9b40ef159b8",
           "ec2:InstanceType": "t3.medium",
           "ec2:InstanceMarketType": "on-demand",
-          "ec2:MetadataHttpTokens": "required",
-          "ec2:Vpc": "vpc-0213b3c62cb94e86d"
+          "ec2:MetadataHttpTokens": "required"
         },
         "NumericEquals": {
           "ec2:MetadataHttpPutResponseHopLimit": 1

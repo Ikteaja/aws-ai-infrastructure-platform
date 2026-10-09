@@ -19,11 +19,17 @@ The EC2 launch permissions are kept in a separate managed policy because AWS
 limits each managed policy document to 6,144 non-whitespace characters. The
 `eks-node-launch.json` policy allows `ec2:RunInstances` only in `eu-central-1`
 when using the current `ai-platform-dev` CPU launch template, `t3.medium`
-On-Demand instances, required IMDSv2, a hop limit of 1, and the dev VPC. It
-also allows creation-time tags only for the expected worker instances and
-volumes. These changes are source-only until a reviewed bootstrap plan is
-applied. If the launch template, VPC, or worker instance type is replaced,
-update the matching policy condition to the new value before deploying again.
+On-Demand instances, and required IMDSv2 with a hop limit of 1. The first
+attempt also conditioned the allow on `ec2:Vpc`, but AWS's decoded
+`RunInstances` authorization context did not contain that key, so the
+condition could never match and the role remained denied. The VPC restriction
+is instead enforced through the named launch template and its configured
+private network interface/security group. The policy also allows
+creation-time tags only for the expected worker instances and volumes. The
+corrected policy has been applied as managed policy version `v2`, and IAM
+simulation of the decoded launch request now returns `allowed`. If the launch
+template or worker instance type is replaced, update the matching policy
+condition to the new value before deploying again.
 
 The bootstrap policy source grants `iam:GetRole` and
 `iam:ListAttachedRolePolicies` on the three named EKS service roles only:
@@ -57,7 +63,7 @@ applies can leave some resources successfully created.
 | VPC CNI add-on: `iam:GetRole` denied | EKS needs to read the IAM role configured for the add-on, `healthops-dev-eks-vpc-cni`. | Add narrowly scoped `iam:GetRole`. The deployment later advanced beyond this error; confirm the live policy if it recurs. |
 | Managed node group: `iam:GetRole` denied for `healthops-dev-eks-workers` | EKS needs to inspect the node group's worker role. The previous `GetRole` grant covered only the CNI role. | Expand the source policy's `iam:GetRole` resource list to the three named EKS service roles. The source is updated; apply it through bootstrap before retrying. |
 | Managed node group: `iam:ListAttachedRolePolicies` denied for `healthops-dev-eks-workers` | EKS checks which AWS-managed policies are attached to the node role during node-group validation. `iam:GetRole` alone does not allow this separate IAM API operation. | Add `iam:ListAttachedRolePolicies`, alongside `iam:GetRole`, scoped to the three named EKS service roles. This latest addition is source-only until a reviewed bootstrap plan is applied. |
-| Managed node group: `You are not authorized to launch instances with this launch template` | The decoded authorization context identifies missing `ec2:RunInstances` permission on `instance/*` for the Terraform apply role. | Add a launch-template-, type-, IMDS-, VPC-, and region-constrained `ec2:RunInstances` allow, plus creation-time instance/volume tagging scoped to the expected tags, in the separate `eks-node-launch` managed policy to stay under the 6,144-character policy limit. Apply the bootstrap change, then retry with a fresh dev plan. |
+| Managed node group: `You are not authorized to launch instances with this launch template` | The decoded authorization context identifies missing `ec2:RunInstances` permission on `instance/*` for the Terraform apply role. The first launch policy also required `ec2:Vpc`, which the request context did not provide. | Remove the unsatisfied `ec2:Vpc` condition while retaining launch-template-, type-, IMDS-, and region constraints; keep creation-time instance/volume tagging scoped to expected tags. The corrected separate `eks-node-launch` policy is applied, and simulation of the decoded request now returns allowed. Retry the deployment with a fresh plan. |
 | Applying a saved bootstrap plan: `Saved plan is stale` | Bootstrap state changed after that plan was generated; Terraform refuses to apply an outdated snapshot. | Generate a new plan from the latest state, inspect it, then apply that exact fresh plan. Never try to reuse the stale plan. |
 | Saved-plan warning: `Ignoring variable when applying a saved plan` | The apply command or workflow supplied a variable that differed from the value already embedded in the saved plan. | Do not override Terraform variables at saved-plan apply time. Change inputs and create a new plan instead. The workflow should apply the exact reviewed artifact. |
 
@@ -101,9 +107,11 @@ than retrying the decode. Do not pipe an empty or failed decode result into
 Inspect the decoded `explicitDeny`, `matchedStatements`, `failures`,
 `context.action`, `context.resource`, and principal details. The result for the
 latest failure identified `ec2:RunInstances` on `instance/*` for the Terraform
-apply role; the allow has been added to the source `eks-node-launch` policy
-with narrow launch conditions. Do not paste account-sensitive authorization
-details into a public issue.
+apply role; the allow is in the separate `eks-node-launch` policy. Its first
+version included an unsatisfied `ec2:Vpc` condition. Version `v2` removed that
+condition, was applied, and passed IAM simulation for the decoded request.
+Retry the EKS deployment with a fresh plan. Do not paste account-sensitive
+authorization details into a public issue.
 
 ## Permission and responsibility map
 
