@@ -90,3 +90,26 @@ resource "aws_iam_role_policy_attachment" "terraform_apply_eks" {
   role       = aws_iam_role.terraform_apply.name
   policy_arn = aws_iam_policy.eks_apply.arn
 }
+
+resource "aws_iam_policy" "eks_node_launch" {
+  provider    = aws.iam
+  name        = "healthops-dev-eks-node-launch"
+  path        = "/"
+  description = "Allow narrowly scoped EC2 launches for the ai-platform-dev CPU node group."
+  policy      = jsonencode(jsondecode(file("${path.module}/policies/managed/eks-node-launch.json")))
+
+  tags = {
+    Project     = "healthcare-operations-assistant"
+    Environment = "dev"
+    Owner       = "Ikteaja"
+    ManagedBy   = "Terraform"
+    Component   = "eks"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "terraform_apply_eks_node_launch" {
+  provider = aws.iam
+
+  role       = aws_iam_role.terraform_apply.name
+  policy_arn = aws_iam_policy.eks_node_launch.arn
+}

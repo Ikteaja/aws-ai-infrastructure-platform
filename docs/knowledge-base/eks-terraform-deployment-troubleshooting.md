@@ -8,13 +8,22 @@ deployment.
 ## Current state and important distinction
 
 The latest reported deployment passed the earlier EKS role-read checks and
-reached EC2 instance launch for the managed node group. It failed with
-`You are not authorized to launch instances with this launch template` and an
-encoded authorization failure. The token pasted for decoding was truncated:
-the Actions log contains a 923-character token, but the pasted value stopped
-early. The exact denied action/resource has therefore not yet been decoded.
-Do not add `ec2:*` or assume the missing action is `ec2:RunInstances` without
-decoding the complete message first.
+reached EC2 instance launch for the managed node group. The complete
+923-character authorization message was decoded successfully. It reports
+`allowed: false`, `explicitDeny: false`, no matched statements, action
+`RunInstances`, and resource `arn:aws:ec2:eu-central-1:429496640190:instance/*`
+for the `healthops-dev-terraform-apply` role. This is a missing identity-based
+allow, not an explicit deny or a Terraform syntax problem.
+
+The EC2 launch permissions are kept in a separate managed policy because AWS
+limits each managed policy document to 6,144 non-whitespace characters. The
+`eks-node-launch.json` policy allows `ec2:RunInstances` only in `eu-central-1`
+when using the current `ai-platform-dev` CPU launch template, `t3.medium`
+On-Demand instances, required IMDSv2, a hop limit of 1, and the dev VPC. It
+also allows creation-time tags only for the expected worker instances and
+volumes. These changes are source-only until a reviewed bootstrap plan is
+applied. If the launch template, VPC, or worker instance type is replaced,
+update the matching policy condition to the new value before deploying again.
 
 The bootstrap policy source grants `iam:GetRole` and
 `iam:ListAttachedRolePolicies` on the three named EKS service roles only:
@@ -25,10 +34,12 @@ The bootstrap policy source grants `iam:GetRole` and
 
 The source file is
 [`eks-apply.json`](../../infrastructure/terraform/bootstrap/policies/managed/eks-apply.json).
-The latest worker-role and role-policy-list permission changes have **not been
-confirmed as applied in AWS**. A source change is not an AWS permission change
-until a reviewed bootstrap Terraform plan has been applied. Check the live
-policy or a fresh bootstrap plan before assuming it is active.
+The launch-only policy source is
+[`eks-node-launch.json`](../../infrastructure/terraform/bootstrap/policies/managed/eks-node-launch.json).
+The earlier worker-role and role-policy-list changes were reflected in AWS:
+the bootstrap plan reported no changes before the launch authorization was
+decoded. The new `ec2:RunInstances` and creation-time tag grants are
+**source-only** until a reviewed bootstrap Terraform plan is applied.
 
 The cluster was last reported as `ACTIVE`, with the Pod Identity Agent and
 `kube-proxy` present. VPC CNI, CoreDNS, and the managed node group were not
@@ -46,7 +57,7 @@ applies can leave some resources successfully created.
 | VPC CNI add-on: `iam:GetRole` denied | EKS needs to read the IAM role configured for the add-on, `healthops-dev-eks-vpc-cni`. | Add narrowly scoped `iam:GetRole`. The deployment later advanced beyond this error; confirm the live policy if it recurs. |
 | Managed node group: `iam:GetRole` denied for `healthops-dev-eks-workers` | EKS needs to inspect the node group's worker role. The previous `GetRole` grant covered only the CNI role. | Expand the source policy's `iam:GetRole` resource list to the three named EKS service roles. The source is updated; apply it through bootstrap before retrying. |
 | Managed node group: `iam:ListAttachedRolePolicies` denied for `healthops-dev-eks-workers` | EKS checks which AWS-managed policies are attached to the node role during node-group validation. `iam:GetRole` alone does not allow this separate IAM API operation. | Add `iam:ListAttachedRolePolicies`, alongside `iam:GetRole`, scoped to the three named EKS service roles. This latest addition is source-only until a reviewed bootstrap plan is applied. |
-| Managed node group: `You are not authorized to launch instances with this launch template` | The node-group request reached instance launch but AWS denied authorization involving the launch template. The short error excerpt does not identify which EC2 action/resource failed; the encoded authorization message is needed. | Decode the complete encoded message using an authorized administrator profile. Do not add a broad EC2 grant. No fix is confirmed until the exact denied action and resource are known. |
+| Managed node group: `You are not authorized to launch instances with this launch template` | The decoded authorization context identifies missing `ec2:RunInstances` permission on `instance/*` for the Terraform apply role. | Add a launch-template-, type-, IMDS-, VPC-, and region-constrained `ec2:RunInstances` allow, plus creation-time instance/volume tagging scoped to the expected tags, in the separate `eks-node-launch` managed policy to stay under the 6,144-character policy limit. Apply the bootstrap change, then retry with a fresh dev plan. |
 | Applying a saved bootstrap plan: `Saved plan is stale` | Bootstrap state changed after that plan was generated; Terraform refuses to apply an outdated snapshot. | Generate a new plan from the latest state, inspect it, then apply that exact fresh plan. Never try to reuse the stale plan. |
 | Saved-plan warning: `Ignoring variable when applying a saved plan` | The apply command or workflow supplied a variable that differed from the value already embedded in the saved plan. | Do not override Terraform variables at saved-plan apply time. Change inputs and create a new plan instead. The workflow should apply the exact reviewed artifact. |
 
@@ -59,16 +70,14 @@ responsible policy, then review and apply the bootstrap change.
 ### Decode the launch-template authorization failure
 
 Copy the **entire** value following `Encoded authorization failure message:`
-from the full GitHub Actions log. In the latest run, the token was 923
-characters and ended with `CVv1X7xO3X7mEJFfaoVd5zfI`; the shorter value pasted
-into PowerShell ended at `...mZS` and is invalid. Confirm the copied value
-before decoding:
+from the full GitHub Actions log. The decoded result identifies the principal,
+action, and resource; do not infer the missing permission from the generic
+launch-template error alone. Decode with an authorized administrator profile:
 
 ```powershell
 $encodedMessage = '<paste the complete encoded message from the Actions log>'
 $encodedMessage = $encodedMessage.Trim()
 Write-Output "Length: $($encodedMessage.Length)"
-Write-Output "Expected suffix present: $($encodedMessage.EndsWith('CVv1X7xO3X7mEJFfaoVd5zfI'))"
 $decodedMessage = $null
 $decodedMessage = aws sts decode-authorization-message `
   --encoded-message $encodedMessage `
@@ -90,10 +99,11 @@ than retrying the decode. Do not pipe an empty or failed decode result into
 `ConvertFrom-Json`.
 
 Inspect the decoded `explicitDeny`, `matchedStatements`, `failures`,
-`context.action`, `context.resource`, and principal details. The output should
-identify the actual denied operation (for example, an EC2 launch or tag action)
-and relevant resource. Only then update the least-privilege bootstrap policy.
-Do not paste account-sensitive authorization details into a public issue.
+`context.action`, `context.resource`, and principal details. The result for the
+latest failure identified `ec2:RunInstances` on `instance/*` for the Terraform
+apply role; the allow has been added to the source `eks-node-launch` policy
+with narrow launch conditions. Do not paste account-sensitive authorization
+details into a public issue.
 
 ## Permission and responsibility map
 
