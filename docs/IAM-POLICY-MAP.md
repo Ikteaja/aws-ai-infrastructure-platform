@@ -70,6 +70,12 @@ Agent and kube-proxy are present, but VPC CNI, CoreDNS, and the managed node
 group are still absent. Create and review a fresh dev plan after the bootstrap
 policy update.
 
+The latest managed node-group attempt progressed to instance launch and failed
+with an encoded launch-template authorization error. The log excerpt did not
+include the complete encoded message, so the exact denied EC2 action/resource
+is unconfirmed. Decode the full message before granting any EC2 permissions;
+see the [EKS troubleshooting knowledge base](knowledge-base/eks-terraform-deployment-troubleshooting.md#decode-the-launch-template-authorization-failure).
+
 The ECR plan/apply policies and image-publisher role are declared in bootstrap
 Terraform. The EKS policy and service-role changes above are applied; other
 bootstrap changes must be checked against their actual live state before
