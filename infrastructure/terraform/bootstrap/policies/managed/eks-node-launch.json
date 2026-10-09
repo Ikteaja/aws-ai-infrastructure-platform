@@ -1,0 +1,45 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "LaunchDevEksCpuInstances",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1",
+          "ec2:LaunchTemplate": "arn:aws:ec2:eu-central-1:429496640190:launch-template/lt-0d2dcb9b40ef159b8",
+          "ec2:InstanceType": "t3.medium",
+          "ec2:InstanceMarketType": "on-demand",
+          "ec2:MetadataHttpTokens": "required",
+          "ec2:Vpc": "vpc-0213b3c62cb94e86d"
+        },
+        "NumericEquals": {
+          "ec2:MetadataHttpPutResponseHopLimit": 1
+        }
+      }
+    },
+    {
+      "Sid": "TagDevEksCpuInstancesAndVolumesOnLaunch",
+      "Effect": "Allow",
+      "Action": "ec2:CreateTags",
+      "Resource": [
+        "arn:aws:ec2:eu-central-1:429496640190:instance/*",
+        "arn:aws:ec2:eu-central-1:429496640190:volume/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1",
+          "ec2:CreateAction": "RunInstances",
+          "aws:RequestTag/Name": "ai-platform-dev-cpu-worker",
+          "aws:RequestTag/Project": "healthcare-operations-assistant",
+          "aws:RequestTag/Environment": "dev",
+          "aws:RequestTag/ManagedBy": "Terraform",
+          "aws:RequestTag/Component": "eks",
+          "aws:RequestTag/Owner": "Ikteaja"
+        }
+      }
+    }
+  ]
+}
