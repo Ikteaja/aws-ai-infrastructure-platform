@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: healthops-dev
+  namespace: argocd
+spec:
+  project: healthops-dev
+  source:
+    repoURL: https://github.com/Ikteaja/aws-ai-infrastructure-platform.git
+    targetRevision: feature/dev-network
+    path: kubernetes/applications/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: healthops-dev
+  revisionHistoryLimit: 5
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=false

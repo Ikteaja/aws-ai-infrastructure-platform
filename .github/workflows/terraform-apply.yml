@@ -254,6 +254,9 @@ jobs:
       # STEP 9: Verify live resources against state and publish their inventory.
       - name: Verify deployed resources and write inventory
         working-directory: infrastructure/terraform/environments/dev
+        env:
+          EKS_ADMIN_PUBLIC_IPV4_CIDR: ${{ vars.EKS_ADMIN_PUBLIC_IPV4_CIDR }}
+          EKS_ADMIN_IAM_ROLE_ARN: ${{ vars.EKS_ADMIN_IAM_ROLE_ARN }}
         run: |
           {
             echo ""
@@ -279,6 +282,17 @@ jobs:
             echo "### Live AWS refresh check"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ -z "$EKS_ADMIN_PUBLIC_IPV4_CIDR" || -z "$EKS_ADMIN_IAM_ROLE_ARN" ]]; then
+            echo "::error::Set both EKS_ADMIN_PUBLIC_IPV4_CIDR and EKS_ADMIN_IAM_ROLE_ARN repository variables."
+            exit 1
+          fi
+
+          administrator_json="$(jq -cn \
+            --arg cidr "$EKS_ADMIN_PUBLIC_IPV4_CIDR" \
+            --arg role "$EKS_ADMIN_IAM_ROLE_ARN" \
+            '{public_ipv4_cidr: $cidr, iam_role_arn: $role}')"
+          export TF_VAR_eks_administrator="$administrator_json"
 
           set +e
           terraform plan -refresh-only -detailed-exitcode -no-color \

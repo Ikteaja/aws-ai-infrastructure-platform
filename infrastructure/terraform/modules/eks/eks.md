@@ -182,6 +182,7 @@ ADMINISTRATION: Operator laptop
 | Worker launch template | Prepared worker SG only; IMDSv2 required; encrypted 30-GiB gp3 root volume; instance and volume tags set. |
 | Add-ons | Terraform resolves the newest AWS-compatible versions for the configured Kubernetes version at plan time. Pod Identity Agent, VPC CNI, and kube-proxy are prerequisites for the node group; CoreDNS depends on the node group. |
 | VPC CNI identity | Dedicated Pod Identity association for service account `aws-node` and the bootstrap-managed CNI role, attached to `AmazonEKS_CNI_Policy`. |
+| Persistent application storage | Not configured. The launch template's encrypted 30-GiB `gp3` EBS root disk is node storage and is deleted with the instance; the application document store is S3. No EBS CSI/EFS CSI add-on, StorageClass, or PVC is currently deployed. |
 | Administrator | Access entry for `healthops-dev-eks-admin`, associated with `AmazonEKSClusterAdminPolicy` at cluster scope. |
 | Not included | Application Kubernetes manifests, Argo CD, autoscaler/Karpenter, GPU nodes, Airflow, observability stack, public application ingress/load balancer. |
 
@@ -190,6 +191,34 @@ API/mock-model learning baseline, not a capacity guarantee. Consider
 `t3.large` (8 GiB) if the workloads and system pods cause memory pressure.
 One desired node is cost-conscious, not highly available. A maximum of two
 only sets an upper bound; it does not turn on automatic node scaling.
+
+## Storage configuration
+
+The worker launch template in [`main.tf`](./main.tf) configures one encrypted
+30-GiB `gp3` root EBS volume per worker and sets `delete_on_termination = true`.
+This volume stores the node operating system and container runtime data; do not
+use it as durable application storage. The separate document-storage module
+stores application documents in versioned S3 encrypted with a customer-managed
+KMS key.
+
+The current API and mock-model workloads are stateless. There is no Kubernetes
+`StorageClass` or `PersistentVolumeClaim`, and the EBS CSI driver is not an
+installed EKS add-on. The current recommendation is not to provision another
+20-GiB disk or a shared filesystem until an application requirement needs it.
+
+When persistent block storage is required for a single-writer workload, add
+the AWS EBS CSI EKS add-on, associate its controller service account with a
+dedicated least-privilege IAM role through EKS Pod Identity, then define an
+encrypted `gp3` StorageClass and PVC. Use `WaitForFirstConsumer` for
+Availability-Zone-aware scheduling and explicitly choose `Retain` or `Delete`
+reclaim behavior based on the data's value. Plan backups/snapshots separately:
+a PVC and a `Retain` reclaim policy are not backups.
+
+Use EFS CSI only when multiple pods or nodes need concurrent shared-file
+access (`ReadWriteMany`). Keep documents and other object data in S3 and access
+them using AWS APIs rather than mounting a filesystem. These storage drivers
+and Kubernetes objects are future additions, not resources created by the
+current EKS Terraform module.
 
 Kubernetes 1.28 and later use EKS default envelope encryption for Kubernetes
 API data with an AWS-owned KMS key. This configuration does not add a
