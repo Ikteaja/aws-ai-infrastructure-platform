@@ -60,6 +60,42 @@ prepared security group.
 | Application images | Existing `healthops-dev/api` and `healthops-dev/mock-model` ECR repositories |
 | Public application access | Not included; services remain ClusterIP and no ALB is created |
 
+## Kubernetes storage decision
+
+The worker launch template gives each EC2 node a 30-GiB encrypted `gp3` EBS
+root disk. It holds the node operating system and container runtime data; it is
+not durable application storage and is deleted when its worker instance is
+terminated. The document-storage module separately provides the versioned,
+KMS-encrypted S3 bucket for application documents. S3 is object storage, not a
+mounted Kubernetes filesystem.
+
+The API and mock-model deployments are currently stateless and do not declare
+a `PersistentVolumeClaim` (PVC). The EKS cluster currently has no EBS CSI
+driver, application `StorageClass`, or PVC configured. Therefore, **do not
+add a separate 20-GiB volume or shared filesystem until a workload has a
+specific persistence or sharing requirement**.
+
+| Requirement | Recommended storage | Important behavior |
+|---|---|---|
+| Documents, uploads, backups, or other object data | S3 via the AWS SDK | Durable object storage; use the existing document bucket for its intended application data. |
+| One workload needs a durable block disk | EBS CSI with an encrypted `gp3` PVC | Usually `ReadWriteOnce`; the volume is Availability-Zone-bound and attaches to one node at a time. |
+| Multiple pods/nodes need concurrent shared-file access | EFS CSI | Shared network filesystem, typically `ReadWriteMany`; use only when the application needs filesystem semantics. |
+
+If a future single-writer workload needs a PVC, add the AWS EBS CSI managed
+add-on and a dedicated controller IAM role using EKS Pod Identity; attach only
+the required EBS CSI permissions to that role, not to application pods or the
+worker role. Define a `StorageClass` for encrypted `gp3` with
+`volumeBindingMode: WaitForFirstConsumer` so Kubernetes selects the volume's
+Availability Zone based on pod scheduling, and enable volume expansion when
+needed. Select `reclaimPolicy` deliberately: `Retain` for data that must not
+be automatically deleted with its PVC, or `Delete` for disposable
+development data. A PVC is not a backup; configure and test snapshots and
+restores separately.
+
+For shared writable files, use EFS CSI and scope its IAM/network access to the
+workloads that need it. For documents and other object data, prefer S3 over
+either filesystem. See the [EKS module notes](../infrastructure/terraform/modules/eks/eks.md#storage-configuration) for the infrastructure boundary.
+
 ## How Kubernetes networking and DNS fit together
 
 The cluster has two distinct IP ranges:

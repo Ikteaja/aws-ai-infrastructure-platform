@@ -1,69 +1,57 @@
-# A Deployment manages the mock service's pods.
 apiVersion: apps/v1
 kind: Deployment
-
-# Identify this Deployment.
 metadata:
   name: mock-model
-  namespace: ai-platform
   labels:
     app: mock-model
     component: model
-
 spec:
-  # Run one mock service replica for this lab.
   replicas: 1
-
-  # Manage pods with this label.
   selector:
     matchLabels:
       app: mock-model
-
-  # Define the pod to create.
   template:
     metadata:
       labels:
         app: mock-model
         component: model
-
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
-        # Name the container inside the pod.
         - name: mock-model
-
-          # Use the image already loaded into kind.
           image: secure-ai-platform-mock-model:0.1.0
-
-          # Use the local image when it is available.
           imagePullPolicy: IfNotPresent
-
-          # Match the port used by the mock Dockerfile.
           ports:
             - name: http
               containerPort: 8002
               protocol: TCP
-
-          # Restart the container if health repeatedly fails.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 2
+            timeoutSeconds: 2
+            failureThreshold: 30
           livenessProbe:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3
-
-          # Allow Service traffic when the application responds.
           readinessProbe:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 3
-
-          # Reserve resources and set upper limits.
           resources:
             requests:
               cpu: 100m
@@ -71,10 +59,11 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
-
-          # Restrict the container's privileges.
           securityContext:
             runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:
               drop:
