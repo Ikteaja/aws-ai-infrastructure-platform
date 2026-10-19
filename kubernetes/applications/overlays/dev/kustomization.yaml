@@ -16,10 +16,10 @@ configMapGenerator:
 images:
   - name: secure-ai-platform-api
     newName: 429496640190.dkr.ecr.eu-central-1.amazonaws.com/healthops-dev/api
-    digest: sha256:3afa88863aa9ad5f90b5675b55fc2c254f692998b14f20374ddfad98c0fbd147
+    digest: sha256:1b932c214deacfb3e8ec1b25d0bf20273ea4c021d22f994ecac0fd4a340473d5
   - name: secure-ai-platform-mock-model
     newName: 429496640190.dkr.ecr.eu-central-1.amazonaws.com/healthops-dev/mock-model
-    digest: sha256:496f154a558970ff59338494fc75b4ccf181ab9e5f936713999a96e823f6febb
+    digest: sha256:5147e4a87ee79fabd59d27c52a52859ff2dfbdeb85acaf0a6dc35d7b60f4f0b1
 
 replicas:
   - name: secure-ai-api
