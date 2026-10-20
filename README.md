@@ -273,3 +273,4 @@ The API initially returned HTTP 503 because the Deployment defined
 Changing the Deployment variable to
 `MODEL_BASE_URL=http://mock-model:8002` restored communication.
 The corrected Deployment was applied without rebuilding the image.
+![Architecture and system design](docs/images/argo_cd.png)
